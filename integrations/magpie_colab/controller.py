@@ -53,6 +53,17 @@ def install():
 
     llm.Manager._begin = begin
 
+    original_models = llm.Handler.models
+
+    def models(handler):
+        manager = handler.server.mgr
+        with manager.cond:
+            if manager.state == 'off':
+                apply_settings(config.read(DESIRED))
+            return original_models(handler)
+
+    llm.Handler.models = models
+
 
 if __name__ == '__main__':
     install()

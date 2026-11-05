@@ -121,7 +121,7 @@ The first `up` asks for these and saves them in `state/settings.json`; `python3 
 | Setting | Default | Choices |
 | --- | --- | --- |
 | Images | on | image input on or off |
-| Context | 262K | tokens per request: 32K, 64K, 131K, 262K or any number from 4,096 to 262,144. Text only up to 131K runs on the faster measured memory layout (118.7 tok/s); everything else on the 262K-with-images layout (105.6 tok/s). A smaller context works but is not faster, because only these two layouts are measured. |
+| Context | 262K | tokens per request: 32K, 64K, 131K, 262K, 512K or 1M, or any number from 4,096 to 1,048,576. Text only up to 131K and contexts up to 262K use the original measured layouts. Longer contexts use an experimental single-request layout with reduced batch size and expert cache; speed and full-window reliability have not been established. |
 | Reasoning effort of `ds41` | 50 | 1-100, `low` (50), `high` (75) or `max`. `ds41-max` always uses max. A request's own `reasoning_effort` wins. |
 | Idle stop | 10 minutes | 1-120 minutes without requests, then the GPU stops |
 | Hard stop | 6 hours | 1-24 hours, then the GPU stops whatever happens |
@@ -137,7 +137,7 @@ Without a terminal (scripts, agents) nothing is asked and the saved values or de
 | `LLM_MAX_HOURS` | saved hard stop | hard stop after this many hours |
 | `LLM_MIN_BALANCE` | 5 | refuse to start below this many compute units |
 | `LLM_IMAGES` | saved | `1` image input on, `0` off |
-| `LLM_CONTEXT` | saved | tokens per request, 4096-262144, or 32K, 64K, 131K, 262K |
+| `LLM_CONTEXT` | saved | tokens per request, 4096-1048576, or 32K, 64K, 131K, 262K, 512K, 1M |
 | `LLM_PROFILE` | unset | presets: `default` (images, 262K) or `fast` (text only, 131K, same as `--fast`) |
 | `LLM_MODEL` | saved setting or `original` | `original` or `abiray` for unattended `up` and `serve`; `--model` takes precedence |
 | `LLM_BIND` | 127.0.0.1 | listen address (see "Other devices") |

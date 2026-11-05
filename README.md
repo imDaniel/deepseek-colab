@@ -60,7 +60,7 @@ python3 llm.py up --model abiray    # Abiray's pre-abliterated IQ2_XXS weights
 
 The selection applies to the local endpoint and its automatic restarts. Stop the endpoint with `python3 llm.py down` before switching. `python3 llm.py settings` can save a default, and `LLM_MODEL=original` or `LLM_MODEL=abiray` can select a model for unattended `up` or `serve`; the command-line option takes precedence. The original model retains the existing uncensor setting. Abiray already includes its uncensor edit, so the separate AtomicChat patch is not applied. Both variants use the existing shared Engram and DSpark draft files.
 
-Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. The project Uncensored mode was also tested on a fresh G4 and successfully applied the AtomicChat patch. Image input, longer contexts, performance and sustained operation with Abiray have not been validated; the project's published performance numbers apply only to the original model.
+Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. With a 1M allocation and image input enabled, it correctly identified a test image and answered a synthetic 1,000,054-token prompt in 674 seconds. The project Uncensored mode was tested on a fresh G4 and successfully applied the AtomicChat patch. Sustained operation, long-context accuracy on realistic material and image quality with Abiray have not been established; the project's published performance numbers apply only to the original model.
 
 The startup scripts try to restore a pinned G4 binary from this repository's release. They verify its digest, build inputs, GPU, driver, CUDA and runtime environment before use, and fall back to compiling from source if the cache cannot be used.
 
@@ -74,7 +74,7 @@ The startup scripts try to restore a pinned G4 binary from this repository's rel
 | First token, 8K / 32K prompt | 9.9 / 27.8 s | 8.8 / 23.4 s |
 | Follow-up turns (prompt cache) | about 1 s | about 1 s |
 
-Image input and context size are separate settings. Text only up to 131K gets the faster memory layout; everything else runs at the left column's speed. Both serve two requests at a time, with tool calling and separate reasoning output. Speeds are the average of six fixed answers at reasoning effort max.
+Image input and context size are separate settings. Text only up to 131K gets the faster memory layout; contexts up to 262K with images use the other measured layout. Both serve two requests at a time, with tool calling and separate reasoning output. Speeds are the average of six fixed answers at reasoning effort max. Contexts above 262K use an experimental single-request layout with lower batch size and expert cache; the performance figures do not apply.
 
 ## What it costs
 

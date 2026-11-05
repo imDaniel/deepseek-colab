@@ -25,7 +25,7 @@ T0=$(date +%s)
 st() { echo "$(( $(date +%s) - T0 ))s $(date +%T) $*" >> $R/timeline.txt; }
 seen() { grep -qE "$1" $R/timeline.txt; }
 hdr() { echo "Authorization: Bearer $(cat /content/secrets/key)"; }
-st "boot start model=$MODEL_VARIANT ctx=$CTX ubatch=$UBATCH cache=$MOE_CACHE_MIB dyn=$DYN images=$MMPROJ draft=$DRAFT uncensored=$UNCENSOR"
+st "boot start model=$MODEL_VARIANT ctx=$CTX slots=${SLOTS:-2} ubatch=$UBATCH cache=$MOE_CACHE_MIB dyn=$DYN images=$MMPROJ draft=$DRAFT uncensored=$UNCENSOR"
 mountpoint -q /mnt/ram || mount -t tmpfs -o size=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1000000 - 6 ))G tmpfs /mnt/ram
 mkdir -p $M
 

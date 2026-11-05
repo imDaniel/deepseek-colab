@@ -5,13 +5,13 @@ import tempfile
 from pathlib import Path
 
 DEFAULTS = {
-    'idle_min': 10, 'max_hours': 6, 'model': 'abiray', 'images': False,
-    'context': 32768, 'effort': 'low', 'uncensor': True, 'draft': True,
+    'idle_min': 10, 'max_hours': 6, 'model': 'abiray', 'images': True,
+    'context': 32768, 'effort': 'max', 'uncensor': True, 'draft': True,
     'min_balance': 5,
 }
 CHOICES = {
     'idle_min': (2, 10, 30, 60), 'max_hours': (1, 2, 6, 12, 24),
-    'model': ('original', 'abiray'), 'context': (32768, 65536, 131072, 262144),
+    'model': ('original', 'abiray'), 'context': (32768, 65536, 131072, 262144, 524288, 1048576),
     'effort': ('low', 'high', 'max'),
 }
 

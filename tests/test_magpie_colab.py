@@ -14,10 +14,32 @@ spec = importlib.util.spec_from_file_location('llm_magpie_test', Path(__file__).
 llm = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(llm)
 with mock.patch.dict(sys.modules, {'llm': llm}):
-    from integrations.magpie_colab import config, controller, panel
+    from integrations.magpie_colab import config, controller, panel, refresh
 
 
 class SettingsTests(unittest.TestCase):
+    def test_catalog_refresh_tracks_active_settings_until_session_stops(self):
+        active = dict(config.DEFAULTS, context=1048576)
+        desired = dict(config.DEFAULTS, context=32768)
+        status = {'controller': {'state': 'ready'}, 'active_settings': active, 'desired': desired}
+        self.assertEqual(refresh.effective(status), active)
+        status['controller']['state'] = 'off'
+        self.assertEqual(refresh.effective(status), desired)
+        status['controller']['state'] = 'unavailable'
+        self.assertIsNone(refresh.effective(status))
+
+    def test_long_context_reserves_one_full_million_token_slot(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(llm, 'SETTINGS', dict(llm.DEFAULTS, context=1048576, images=True)):
+            self.assertEqual(llm.context_value('1M'), 1048576)
+            info = llm.profile()
+            self.assertEqual((info['CTX'], info['SLOTS'], info['MMPROJ']), ('1048576', '1', '1'))
+            self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576))['context'], 1048576)
+            handler = object.__new__(llm.Handler)
+            self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
+            self.assertEqual(handler.models()['data'][0]['modalities']['input'], ['text', 'image'])
+
     def test_first_request_uses_settings_applied_at_wake(self):
         handler = object.__new__(llm.Handler)
         manager = mock.Mock()
@@ -79,6 +101,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'CHILD_ENV', dict(llm.CHILD_ENV)), \
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
+                mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True) as begin:
             config.write(controller.DESIRED, dict(config.DEFAULTS))
             controller.install()
@@ -104,6 +127,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'CHILD_ENV', dict(llm.CHILD_ENV)), \
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
+                mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
             config.write(controller.ACTIVE, dict(config.DEFAULTS, idle_min=2))
             config.write(controller.DESIRED, dict(config.DEFAULTS, model='original', idle_min=30))
@@ -111,6 +135,33 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(llm.SETTINGS['model'], 'abiray')
             self.assertEqual(llm.IDLE_MIN, 2)
             self.assertEqual(llm.CHILD_ENV['LLM_IDLE_MIN'], '2')
+
+    def test_model_catalog_uses_desired_when_off_and_active_when_running(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        with tempfile.TemporaryDirectory() as root, mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(controller, 'DESIRED', Path(root) / 'desired.json'), \
+                mock.patch.object(llm, 'load_session', return_value=None), \
+                mock.patch.object(llm, 'SETTINGS', dict(llm.SETTINGS)), \
+                mock.patch.object(llm, 'CHILD_ENV', dict(llm.CHILD_ENV)), \
+                mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
+                mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
+                mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Manager, '_begin', autospec=True):
+            config.write(controller.DESIRED, dict(config.DEFAULTS, context=1048576))
+            controller.install()
+            manager = llm.Manager()
+            handler = object.__new__(llm.Handler)
+            handler.server = mock.Mock(mgr=manager)
+            self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
+            manager.state = 'ready'
+            config.write(controller.DESIRED, dict(config.DEFAULTS, context=32768, images=False))
+            active = handler.models()['data'][0]
+            self.assertEqual(active['context_length'], 1048576)
+            self.assertEqual(active['modalities']['input'], ['text', 'image'])
+            manager.state = 'off'
+            desired = handler.models()['data'][0]
+            self.assertEqual(desired['context_length'], 32768)
+            self.assertEqual(desired['modalities']['input'], ['text'])
 
 
 class PanelTests(unittest.TestCase):

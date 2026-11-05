@@ -21,7 +21,7 @@ USAGE = '''usage: python3 llm.py COMMAND [--fast] [--model original|abiray]
   serve         run the endpoint in the foreground (Ctrl+C stops the GPU too)
   --fast        this run only: text only, 131K context, the faster layout (118.7 instead of 105.6 tok/s)
   --model       up/serve only: original (project model) or abiray (pre-abliterated IQ2_XXS)
-env: LLM_PORT (18080) LLM_IDLE_MIN (10) LLM_MAX_HOURS (6) LLM_MIN_BALANCE (5) LLM_IMAGES (0|1) LLM_CONTEXT (4096-262144)
+env: LLM_PORT (18080) LLM_IDLE_MIN (10) LLM_MAX_HOURS (6) LLM_MIN_BALANCE (5) LLM_IMAGES (0|1) LLM_CONTEXT (4096-1048576)
      LLM_PROFILE (default|fast presets) LLM_MODEL (original|abiray) LLM_BIND (127.0.0.1)
      HF_TOKEN (optional Hugging Face token for the downloads) LLM_YES=1 (answer yes to install prompts) LLM_BOOT_ENV ("K=V ...")
      LLM_SESSION LLM_COLAB LLM_STATE LLM_VM_DIR; tests: LLM_SSH_CMD LLM_TUNNEL_PORT LLM_POLL_S'''
@@ -62,9 +62,11 @@ COLAB_CLI = 'google-colab-cli==0.7.5'
 G4_CU_PER_HOUR = 8.9
 # the two GPU memory layouts measured on the G4: 'default' fits images and 262K per request, 'fast' text only up to 131K
 LAYOUTS = {'default': {'UBATCH': '2048', 'MOE_CACHE_MIB': '70430', 'DYN': '110', 'DMA': '0', 'SPEED': '105.6'},
-           'fast': {'UBATCH': '3072', 'MOE_CACHE_MIB': '74231', 'DYN': '166', 'DMA': '1', 'SPEED': '118.7'}}
-CONTEXTS = {'32k': 32768, '64k': 65536, '128k': 131072, '131k': 131072, '256k': 262144, '262k': 262144}
-BOOT_KEYS = ('CTX', 'UBATCH', 'MMPROJ', 'MOE_CACHE_MIB', 'DYN', 'DMA', 'DRAFT', 'UNCENSOR', 'WORKERS')
+           'fast': {'UBATCH': '3072', 'MOE_CACHE_MIB': '74231', 'DYN': '166', 'DMA': '1', 'SPEED': '118.7'},
+           'long': {'UBATCH': '512', 'MOE_CACHE_MIB': '64000', 'DYN': '50', 'DMA': '0', 'SPEED': 'unmeasured'}}
+CONTEXTS = {'32k': 32768, '64k': 65536, '128k': 131072, '131k': 131072, '256k': 262144, '262k': 262144,
+            '512k': 524288, '1m': 1048576}
+BOOT_KEYS = ('CTX', 'SLOTS', 'UBATCH', 'MMPROJ', 'MOE_CACHE_MIB', 'DYN', 'DMA', 'DRAFT', 'UNCENSOR', 'WORKERS')
 VM_PORT = 18080
 NO_WINDOW, DETACHED, NEW_GROUP, BREAKAWAY = 0x08000000, 0x00000008, 0x00000200, 0x01000000
 CHILD_FLAGS = NO_WINDOW if IS_WIN else 0
@@ -202,11 +204,11 @@ def colab_cmd():
 
 
 def context_value(text):
-    """Tokens per request: 32K, 64K, 131K, 262K or a number from 4096 to 262144 (rounded up to 256); None otherwise."""
+    """Tokens per request, up to 1M (rounded up to 256); None for invalid input."""
     t = str(text).strip().lower().replace(',', '')
     if t in CONTEXTS:
         return CONTEXTS[t]
-    return -(-int(t) // 256) * 256 if t.isdigit() and 4096 <= int(t) <= 262144 else None
+    return -(-int(t) // 256) * 256 if t.isdigit() and 4096 <= int(t) <= 1048576 else None
 
 
 def short_context(n):
@@ -218,17 +220,19 @@ def choice():
     images, context = bool(SETTINGS['images']), context_value(SETTINGS['context']) or 262144
     preset = os.environ.get('LLM_PROFILE')
     if preset:
-        if preset not in LAYOUTS:
+        if preset not in ('default', 'fast'):
             sys.exit('unknown LLM_PROFILE %r (use default or fast)' % preset)
         images, context = (True, 262144) if preset == 'default' else (False, 131072)
     if os.environ.get('LLM_IMAGES'):
         images = os.environ['LLM_IMAGES'] == '1'
     if os.environ.get('LLM_CONTEXT'):
-        context = context_value(os.environ['LLM_CONTEXT']) or sys.exit('LLM_CONTEXT must be 4096-262144 tokens, or 32K, 64K, 131K, 262K')
+        context = context_value(os.environ['LLM_CONTEXT']) or sys.exit('LLM_CONTEXT must be 4096-1048576 tokens, or 32K, 64K, 131K, 262K, 512K, 1M')
     return images, context
 
 
 def layout(images, context):
+    if context > 262144:
+        return 'long'
     return 'fast' if not images and context <= 131072 else 'default'
 
 
@@ -248,10 +252,11 @@ def model_variant():
 
 
 def profile():
-    """Boot values for the chosen images and context; CTX is the total of the 2 request slots."""
+    """Boot values; long contexts use a single request slot to conserve memory."""
     images, context = choice()
     lay = LAYOUTS[layout(images, context)]
-    return {'CTX': str(2 * context), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': lay['MOE_CACHE_MIB'],
+    slots = 1 if context > 262144 else 2
+    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': lay['MOE_CACHE_MIB'],
             'DYN': lay['DYN'], 'DMA': lay['DMA']}
 
 
@@ -1228,7 +1233,9 @@ class Handler(BaseHTTPRequestHandler):
     def models(self):
         info = profile()
         return {'object': 'list', 'data': [{'id': m, 'object': 'model', 'owned_by': 'llm.py', 'created': 0, 'reasoning_effort': e,
-                                            'context_length': int(info['CTX']) // 2, 'image_input': info['MMPROJ'] == '1'} for m, e in model_efforts()]}
+                                            'context_length': int(info['CTX']) // int(info['SLOTS']), 'image_input': info['MMPROJ'] == '1',
+                                            'modalities': {'input': ['text', 'image'] if info['MMPROJ'] == '1' else ['text'],
+                                                           'output': ['text']}} for m, e in model_efforts()]}
 
     def route(self, body):
         mgr, path = self.server.mgr, self.path.split('?')[0]
@@ -1537,6 +1544,8 @@ def yes_no(text):
 
 def speed_note(images, context):
     """What the chosen pair runs at, and why a smaller context alone is not faster."""
+    if context > 262144:
+        return 'experimental long context · one request at a time · speed unmeasured'
     note = 'about %s tok/s' % LAYOUTS[layout(images, context)]['SPEED']
     if images:
         return note + ' · smaller contexts work but are not faster'
@@ -1566,7 +1575,7 @@ def choose_settings(force=False):
     print('%s  %s\n' % (paint('Settings', 'bold'), paint('Enter keeps the value in brackets', 'dim')))
     old, new = SETTINGS, dict(SETTINGS)
     new['images'] = pick('Images', 'image input, y or n', 'y' if old['images'] else 'n', yes_no)
-    new['context'] = pick('Context', '32K, 64K, 131K or 262K', short_context(context_value(old['context']) or 262144), context_value)
+    new['context'] = pick('Context', '32K, 64K, 131K, 262K, 512K or 1M', short_context(context_value(old['context']) or 262144), context_value)
     print('  %s%s' % (' ' * 12, paint(speed_note(new['images'], new['context']), 'dim')))
     new['effort'] = pick('Effort', 'ds41: 1-100, low, high, max', old['effort'], effort_value)
     new['idle_min'] = pick('Idle stop', 'minutes, 1-120', old['idle_min'], lambda t: number(t, 1, 120))
@@ -1722,7 +1731,7 @@ def write_opencode(port=PORT):
     image = {'attachment': True, 'modalities': {'input': ['text', 'image'], 'output': ['text']}} if info['MMPROJ'] == '1' else {}
     models = {m: dict({'name': 'DeepSeek-V4.1-Flash uncensored, reasoning effort %s' % e, 'tool_call': True, 'reasoning': True,
                        'interleaved': {'field': 'reasoning_content'}, 'options': {'reasoningEffort': e},
-                       'limit': {'context': int(info['CTX']) // 2, 'output': 32768}}, **image) for m, e in model_efforts()}
+                       'limit': {'context': int(info['CTX']) // int(info['SLOTS']), 'output': 32768}}, **image) for m, e in model_efforts()}
     cfg = {'$schema': 'https://opencode.ai/config.json',
            'provider': {'ds41': {'npm': '@ai-sdk/openai-compatible', 'name': 'DeepSeek-V4.1-Flash on Colab',
                                  'options': {'baseURL': 'http://%s:%d/v1' % (HOST, port), 'apiKey': '{file:%s}' % KEY_FILE.replace('\\', '/'),
@@ -1737,8 +1746,8 @@ def endpoint_info(port, bal=None):
     info, me_cmd = profile(), cli()
     rows = (('Base URL', 'http://%s:%d/v1' % (HOST, port)), ('API key', api_key()),
             ('Models', 'ds41 (effort %s) · ds41-max (effort max)' % SETTINGS['effort']),
-            ('Context', '%s tokens per request · image input %s · about %s tok/s' % (
-                '{:,}'.format(int(info['CTX']) // 2), 'on' if info['MMPROJ'] == '1' else 'off', LAYOUTS[layout(*choice())]['SPEED'])))
+            ('Context', '%s tokens per request · image input %s · %s' % (
+                '{:,}'.format(int(info['CTX']) // int(info['SLOTS'])), 'on' if info['MMPROJ'] == '1' else 'off', speed_note(*choice()))))
     print()
     for name, value in rows:
         print('  %-10s %s' % (name, paint(value, 'bold')))

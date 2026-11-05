@@ -581,7 +581,8 @@ class UnitTests(unittest.TestCase):
                     self.assertIn(w, envs, (images, context))
         finally:
             del os.environ['LLM_IMAGES'], os.environ['LLM_CONTEXT']
-        self.assertEqual([L.context_value(v) for v in ('300000', '5000', '262K', 'abc', '4095')], [None, 5120, 262144, None, None])
+        self.assertEqual([L.context_value(v) for v in ('1048577', '300000', '5000', '262K', '1M', 'abc', '4095')],
+                         [None, 300032, 5120, 262144, 1048576, None, None])
 
     def test_boot_env(self):
         L = self.llm
@@ -592,7 +593,7 @@ class UnitTests(unittest.TestCase):
             self.assertIn("MMPROJ='1'", envs)
             self.assertIn("DRAFT='0' X_A='1'", envs)
             os.environ['LLM_PROFILE'] = 'fast'
-            self.assertIn("CTX='262144' UBATCH='3072' MMPROJ='0'", L.boot_env())
+            self.assertIn("CTX='262144' SLOTS='2' UBATCH='3072' MMPROJ='0'", L.boot_env())
             del os.environ['LLM_PROFILE']
             self.assertIn("(%s setsid nohup bash vm/boot.sh" % envs, L.boot_cmd(envs))
             os.environ['LLM_BOOT_ENV'] = "A=it's"

@@ -27,10 +27,10 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
 <section class="settings"><h2>下次启动设置</h2>
 <p class="banner" id="pending" hidden>设置已保存；当前会话继续使用原设置，新设置在下次启动时生效。</p>
 <form id="form"><div class="grid">
- <label>模型版本<select id="model"><option value="abiray">Abiray Uncensored · IQ2_XXS</option><option value="original_uncensored">项目 Uncensored · AtomicChat 补丁</option><option value="original_base">ISTA 原版权重 · 不打补丁</option></select><p class="hint">三种模式共享同一份兼容的编译缓存。</p></label>
+ <label>模型版本<select id="model"><option value="original_base">ISTA 原版权重</option><option value="original_uncensored">ISTA 权重 + AtomicChat 补丁</option><option value="abiray">Abiray Uncensored</option></select><p class="hint">三种模式共享同一份兼容的编译缓存。</p></label>
  <label>空闲停机<select id="idle_min"><option value="2">2 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select><p class="hint">API 无活动后的本地停机阈值；Colab 可提前结束会话。</p></label>
  <label>最长连续运行<select id="max_hours"><option value="1">1 小时</option><option value="2">2 小时</option><option value="6">6 小时</option><option value="12">12 小时</option><option value="24">24 小时</option></select><p class="hint">本地强制停机上限，不延长 Colab 允许的运行时间。24 小时须符合 Colab 套餐条件，且不保证可用。</p></label>
- <label>每次请求上下文<select id="context"><option value="32768">32K</option><option value="65536">64K</option><option value="131072">131K</option><option value="262144">262K</option></select><p class="hint">Abiray 的图像和较长上下文尚未实测。</p></label>
+ <label>每次请求上下文<select id="context"><option value="32768">32K</option><option value="65536">64K</option><option value="131072">131K</option><option value="262144">262K</option><option value="524288">512K</option><option value="1048576">1M</option></select><p class="hint">512K 和 1M 使用单并发及较小的 GPU 缓存；1M 已通过单次长输入测试，持续稳定性有待验证。</p></label>
  <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
  <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
  <div><label class="check"><input id="images" type="checkbox">启用图像输入</label><label class="check"><input id="draft" type="checkbox">启用 DSpark 草稿模型</label><p class="hint">Abiray 已包含修改，不会重复应用补丁。</p></div>
