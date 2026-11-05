@@ -1,3 +1,6 @@
 state/
 __pycache__/
 *.pyc
+
+# Private runtime diagnostics, local infrastructure and benchmark artifacts.
+/experiments/
