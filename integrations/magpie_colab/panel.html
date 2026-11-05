@@ -8,8 +8,10 @@
 :root{color-scheme:light dark;font:15px/1.5 system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box}body{margin:0;background:Canvas;color:CanvasText}
 main{max-width:1000px;margin:auto;padding:28px 24px 64px}h1{font-size:24px;margin:0 0 5px}h2{font-size:17px;margin:0 0 16px}
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.page-header button{flex-shrink:0}
 .intro,.hint{color:GrayText}.intro{margin:0 0 24px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
-.card,.settings{border:1px solid color-mix(in srgb,CanvasText 16%,transparent);border-radius:12px;padding:16px}
+.card,.settings,.logs{border:1px solid color-mix(in srgb,CanvasText 16%,transparent);border-radius:12px;padding:16px}
+.logs{margin-bottom:24px}.logs-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.logs-header h2{margin:0}.logs-header .check{font-size:13px;font-weight:400}.log-note{font-size:12px;color:GrayText;margin:8px 0}.log-output{height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;margin:0;border-radius:8px;background:#10151d;color:#e1e8ef;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}
 .label{color:GrayText;font-size:13px}.value{font-size:21px;font-weight:650;margin-top:4px}.sub{font-size:12px;color:GrayText;margin-top:4px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 20px}label{display:block;font-weight:600;font-size:14px}select,input[type=number]{display:block;width:100%;padding:9px;margin-top:6px;border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-radius:7px;background:Canvas;color:CanvasText;font:inherit}
 .check{display:flex;align-items:center;gap:9px;padding:8px 0}.check input{width:17px;height:17px}.hint{font-weight:400;font-size:12px;margin:5px 0 0}.actions{display:flex;gap:12px;align-items:center;margin-top:22px;flex-wrap:wrap}
@@ -17,12 +19,17 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
 </style>
 </head>
 <body><main>
-<h1>Colab DeepSeek</h1><p class="intro">查看运行状态和计算单元；配置将在下一次启动 G4 时生效。</p>
+<header class="page-header"><div><h1>Colab DeepSeek</h1><p class="intro">查看运行状态和计算单元；配置将在下一次启动 G4 时生效。</p></div><button id="refresh" type="button" aria-label="刷新状态">刷新状态</button></header>
 <section class="cards" aria-label="当前状态">
   <div class="card"><div class="label">Colab 状态</div><div class="value" id="status">加载中…</div><div class="sub" id="stage"></div></div>
   <div class="card"><div class="label">剩余计算单元</div><div class="value" id="balance">—</div><div class="sub" id="balance-note">按需刷新</div></div>
   <div class="card"><div class="label">运行时间</div><div class="value" id="runtime">—</div><div class="sub" id="rate">—</div></div>
   <div class="card"><div class="label">预计空闲停机</div><div class="value" id="idle">—</div><div class="sub" id="active">—</div></div>
+</section>
+<section class="logs" aria-labelledby="logs-title">
+ <div class="logs-header"><h2 id="logs-title">终端日志</h2><label class="check"><input id="logs-auto" type="checkbox" checked>自动刷新</label></div>
+ <p class="log-note" id="logs-note" role="status">控制器日志，包含启动、运行和停机信息；每 5 秒刷新。</p>
+ <pre class="log-output" id="logs-output" tabindex="0" aria-label="控制器终端日志">正在读取日志…</pre>
 </section>
 <section class="settings"><h2>下次启动设置</h2>
 <p class="banner" id="pending" hidden>设置已保存；当前会话继续使用原设置，新设置在下次启动时生效。</p>
@@ -34,13 +41,13 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
  <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
  <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
  <div><label class="check"><input id="images" type="checkbox">启用图像输入</label><label class="check"><input id="draft" type="checkbox">启用 DSpark 草稿模型</label><p class="hint">Abiray 已包含修改，不会重复应用补丁。</p></div>
-</div><div class="actions"><button class="primary" id="save" type="button">保存设置</button><button id="refresh" type="button">刷新状态</button><span id="notice" class="notice" role="status"></span></div></form>
+</div><div class="actions"><button class="primary" id="save" type="button">保存设置</button><span id="notice" class="notice" role="status"></span></div></form>
 <footer>状态由控制器和 Colab CLI 提供；余额约每分钟刷新。G4 可用性和实际扣费由 Colab 决定。</footer>
 </section></main>
 <script>
 (() => {
  const $ = id => document.getElementById(id), fields=['idle_min','max_hours','context','effort','min_balance','images','draft'];
- let dirty=false;
+ let dirty=false, logsBusy=false;
  const fmt = n => n == null ? '—' : Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2});
  const duration = s => {if(s == null)return '—';s=Math.max(0,Math.round(s));return Math.floor(s/3600)+'小时 '+Math.floor(s%3600/60)+'分 '+s%60+'秒'};
  function paint(d){
@@ -55,11 +62,21 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
    if(!dirty&&d.desired){for(const k of fields){const el=$(k);if(el.type==='checkbox')el.checked=!!d.desired[k];else el.value=String(d.desired[k]);}$('model').value=d.desired.model==='abiray'?'abiray':d.desired.uncensor?'original_uncensored':'original_base';}
  }
  async function refresh(){try{const r=await fetch('./api/status',{cache:'no-store'});if(!r.ok)throw new Error('状态读取失败');paint(await r.json());}catch(e){$('status').textContent='不可用';$('stage').textContent=e.message;}}
+ async function refreshLogs(){
+  if(logsBusy)return;logsBusy=true;
+  try{const r=await fetch('./api/logs',{cache:'no-store'});if(!r.ok)throw new Error('日志读取失败');const d=await r.json(),box=$('logs-output');
+   if(!d.available){box.textContent='暂无控制器日志。';$('logs-note').textContent='控制器日志暂不可用。';return;}
+   const follow=box.scrollHeight-box.scrollTop-box.clientHeight<32;
+   box.textContent=d.text||'暂无控制器日志。';if(follow)box.scrollTop=box.scrollHeight;
+   $('logs-note').textContent=(d.truncated?'显示最近 300 行或 64 KiB。':'显示控制器启动、运行和停机日志。')+' 最近更新 '+new Date().toLocaleTimeString();
+  }catch(e){$('logs-note').textContent='日志刷新失败：'+e.message;}finally{logsBusy=false;}
+ }
  $('form').addEventListener('input',()=>dirty=true);
  $('save').addEventListener('click',async ()=>{const v={};for(const k of fields){const el=$(k);v[k]=el.type==='checkbox'?el.checked:['idle_min','max_hours','context','min_balance'].includes(k)?Number(el.value):el.value;}v.model=$('model').value==='abiray'?'abiray':'original';v.uncensor=$('model').value!=='original_base';
   $('save').disabled=true;$('notice').className='notice';$('notice').textContent='保存中…';
   try{const r=await fetch('./api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');dirty=false;$('notice').textContent='已保存，将在下次启动时生效。';await refresh();}catch(e){$('notice').className='notice error';$('notice').textContent=e.message;}finally{$('save').disabled=false;}
  });
- $('refresh').addEventListener('click',refresh);refresh();setInterval(refresh,10000);
+ $('refresh').addEventListener('click',()=>{refresh();refreshLogs();});$('logs-auto').addEventListener('change',()=>{if($('logs-auto').checked)refreshLogs();else $('logs-note').textContent='日志自动刷新已暂停。';});
+ refresh();refreshLogs();setInterval(refresh,10000);setInterval(()=>{if($('logs-auto').checked)refreshLogs();},5000);
 })();
 </script></body></html>

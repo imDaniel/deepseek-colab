@@ -22,6 +22,41 @@ COLAB = os.environ.get('LLM_COLAB', '/opt/colab-deepseek/venv312/bin/colab')
 PORT = int(os.environ.get('COLAB_PANEL_PORT', '18082'))
 balance_lock = threading.Lock()
 balance = {'checked_at': 0.0, 'running': False, 'value': None, 'rate': None, 'assignments': None}
+LOG_TAIL_BYTES = 65536
+LOG_TAIL_LINES = 300
+
+
+def log_snapshot():
+    """Read a bounded tail of the local controller log; never contact or wake Colab."""
+    try:
+        with (STATE / 'llm.log').open('rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            offset = max(0, size - LOG_TAIL_BYTES)
+            f.seek(offset)
+            data = f.read(LOG_TAIL_BYTES)
+        if offset and b'\n' in data:
+            data = data.partition(b'\n')[2]  # discard a partial first line
+        lines = data.decode('utf-8', 'replace').splitlines()
+        truncated = bool(offset or len(lines) > LOG_TAIL_LINES)
+        text = '\n'.join(lines[-LOG_TAIL_LINES:])
+        # The controller also redacts its own key before writing; apply a second
+        # pass before showing any log through the authenticated page service.
+        try:
+            key = (STATE / 'api_key').read_text().strip()
+            if key:
+                text = text.replace(key, '[REDACTED]')
+        except OSError:
+            pass
+        text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+        text = re.sub(r'(?i)(\bBearer\s+)[^\s,;]+', r'\1[REDACTED]', text)
+        text = re.sub(r'''(?i)(\b(?:api[_-]?key|(?:hf[_-]?)?token|access[_-]?token|refresh[_-]?token|password|secret)["']?\s*[:=]\s*["']?)[^\s,;\]}"']+''',
+                      r'\1[REDACTED]', text)
+        text = re.sub(r'\b(?:hf_|sk-|ya29\.)[A-Za-z0-9_.-]{8,}', '[REDACTED]', text)
+        text = re.sub(r'(https?://[^\s?#]+)\?[^\s]*', r'\1?[REDACTED]', text)
+        return {'available': True, 'text': text, 'truncated': truncated}
+    except OSError:
+        return {'available': False, 'text': '', 'truncated': False}
 
 
 def refresh_balance():
@@ -94,6 +129,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split('?', 1)[0]
         if path == '/':
             return self.send(200, PAGE, 'text/html; charset=utf-8')
+        if path == '/api/logs':
+            return self.send(200, log_snapshot())
         if path != '/api/status':
             return self.send(404, {'error': 'not found'})
         try:

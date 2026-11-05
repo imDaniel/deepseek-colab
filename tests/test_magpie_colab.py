@@ -216,6 +216,42 @@ class SettingsTests(unittest.TestCase):
 
 
 class PanelTests(unittest.TestCase):
+    def test_logs_endpoint_tails_and_redacts_without_contacting_colab(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(panel, 'STATE', Path(root)), \
+                mock.patch.object(panel, 'COLAB', '/nonexistent/colab'):
+            state = Path(root)
+            (state / 'api_key').write_text('my-secret-controller-key')
+            lines = ['entry %d' % i for i in range(350)]
+            lines += ['Bearer example-secret', 'api_key=example-secret', 'hf_abcdefghijklmnop', '"token":"json-secret"',
+                      'my-secret-controller-key', 'https://example.test/data?token=private', '<script>not html</script>']
+            (state / 'llm.log').write_text('\n'.join(lines))
+            server = panel.ThreadingHTTPServer(('127.0.0.1', 0), panel.Handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            try:
+                c = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=5)
+                c.request('GET', '/api/logs'); response = c.getresponse(); data = json.loads(response.read()); c.close()
+                self.assertEqual(response.status, 200)
+                self.assertTrue(data['available']); self.assertTrue(data['truncated'])
+                self.assertLessEqual(len(data['text'].splitlines()), panel.LOG_TAIL_LINES)
+                self.assertNotIn('entry 0\n', data['text'])
+                for secret in ('example-secret', 'hf_abcdefghijklmnop', 'json-secret', 'my-secret-controller-key', 'token=private'):
+                    self.assertNotIn(secret, data['text'])
+                self.assertIn('entry 349', data['text'])
+                self.assertIn('<script>not html</script>', data['text'])
+                self.assertIn('textContent', panel.PAGE.decode())
+            finally:
+                server.shutdown(); server.server_close(); thread.join(timeout=5)
+
+    def test_log_snapshot_limits_bytes_and_handles_absent_file(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(panel, 'STATE', Path(root)):
+            self.assertEqual(panel.log_snapshot(), {'available': False, 'text': '', 'truncated': False})
+            (Path(root) / 'llm.log').write_text('old\n' + 'x' * panel.LOG_TAIL_BYTES + '\nlatest')
+            data = panel.log_snapshot()
+            self.assertTrue(data['available']); self.assertTrue(data['truncated'])
+            self.assertEqual(data['text'], 'latest')
+            (Path(root) / 'llm.log').write_text('y' * (panel.LOG_TAIL_BYTES + 20))
+            self.assertEqual(len(panel.log_snapshot()['text']), panel.LOG_TAIL_BYTES)
+
     def test_settings_endpoint_and_nonsecret_status(self):
         with tempfile.TemporaryDirectory() as root, \
                 mock.patch.object(panel, 'DESIRED', Path(root) / 'settings.json'), \
