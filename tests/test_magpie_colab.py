@@ -103,7 +103,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True) as begin:
-            config.write(controller.DESIRED, dict(config.DEFAULTS))
+            config.write(controller.DESIRED, dict(config.DEFAULTS, model='abiray'))
             controller.install()
             manager = llm.Manager()
             manager._begin(True)
@@ -129,7 +129,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
-            config.write(controller.ACTIVE, dict(config.DEFAULTS, idle_min=2))
+            config.write(controller.ACTIVE, dict(config.DEFAULTS, model='abiray', idle_min=2))
             config.write(controller.DESIRED, dict(config.DEFAULTS, model='original', idle_min=30))
             controller.install()
             self.assertEqual(llm.SETTINGS['model'], 'abiray')
@@ -178,7 +178,7 @@ class PanelTests(unittest.TestCase):
                 c = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=5)
                 c.request('GET', '/api/status'); r = c.getresponse(); data = json.loads(r.read())
                 self.assertEqual(r.status, 200)
-                self.assertEqual(data['desired']['model'], 'abiray')
+                self.assertEqual(data['desired']['model'], 'original')
                 self.assertEqual(data['balance']['value'], 20)
                 c.close()
                 value = dict(config.DEFAULTS, model='original', idle_min=2)
