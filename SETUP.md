@@ -16,21 +16,21 @@ Nothing heavy runs on your machine. The model, the downloads and the build all h
 ### Linux
 ```bash
 sudo apt install -y python3 git openssh-client curl    # Debian/Ubuntu; Fedora: sudo dnf install python3 git openssh-clients curl
-git clone https://github.com/leonxger/deepseek-colab.git deepseek-colab && cd deepseek-colab
+git clone https://github.com/imDaniel/deepseek-colab.git deepseek-colab && cd deepseek-colab
 python3 llm.py up
 ```
 
 ### macOS
 Python 3 comes from [python.org](https://www.python.org/downloads/) or `brew install python`. git comes with the Xcode command line tools (`xcode-select --install`).
 ```bash
-git clone https://github.com/leonxger/deepseek-colab.git deepseek-colab && cd deepseek-colab
+git clone https://github.com/imDaniel/deepseek-colab.git deepseek-colab && cd deepseek-colab
 python3 llm.py up
 ```
 
 ### Windows
 Python comes from [python.org](https://www.python.org/downloads/) (or Anaconda), git from [git-scm.com](https://git-scm.com/download/win). The OpenSSH client is built into Windows 10 and 11. In PowerShell or cmd:
 ```powershell
-git clone https://github.com/leonxger/deepseek-colab.git deepseek-colab
+git clone https://github.com/imDaniel/deepseek-colab.git deepseek-colab
 cd deepseek-colab
 python llm.py up
 ```
@@ -53,6 +53,8 @@ From then on, `up` shows your settings in one line: Enter starts, `c` changes th
 | --- | --- |
 | `python3 llm.py up` | Set up if needed, start the GPU, wait until it serves, print base URL, API key and models, then show the live status (Ctrl+C closes the view). The endpoint keeps running in the background. |
 | `python3 llm.py up --fast` | Same, for this run text only with 131K context: the faster layout, about 12% faster decode. |
+| `python3 llm.py up --model original` | Start the project model with the saved uncensor setting. |
+| `python3 llm.py up --model abiray` | Start Abiray's pre-abliterated IQ2_XXS model. |
 | `python3 llm.py down` | Stop the GPU and the background endpoint. |
 | `python3 llm.py status` | Endpoint state, Colab balance and session, base URL and key. |
 | `python3 llm.py watch` | The live status again: GPU running or off, countdown to the automatic stop, cost so far. |
@@ -123,7 +125,8 @@ The first `up` asks for these and saves them in `state/settings.json`; `python3 
 | Reasoning effort of `ds41` | 50 | 1-100, `low` (50), `high` (75) or `max`. `ds41-max` always uses max. A request's own `reasoning_effort` wins. |
 | Idle stop | 10 minutes | 1-120 minutes without requests, then the GPU stops |
 | Hard stop | 6 hours | 1-24 hours, then the GPU stops whatever happens |
-| Uncensored | yes | no = ISTA-DASLab's original tensors |
+| Model | original | `original` uses the project model; `abiray` uses Abiray's pre-abliterated IQ2_XXS weights |
+| Uncensored | yes | for `original` only: no = ISTA-DASLab's original tensors |
 
 Without a terminal (scripts, agents) nothing is asked and the saved values or defaults apply. Environment variables override the saved values for one run, for example `LLM_IDLE_MIN=30 python3 llm.py up`:
 
@@ -136,9 +139,10 @@ Without a terminal (scripts, agents) nothing is asked and the saved values or de
 | `LLM_IMAGES` | saved | `1` image input on, `0` off |
 | `LLM_CONTEXT` | saved | tokens per request, 4096-262144, or 32K, 64K, 131K, 262K |
 | `LLM_PROFILE` | unset | presets: `default` (images, 262K) or `fast` (text only, 131K, same as `--fast`) |
+| `LLM_MODEL` | saved setting or `original` | `original` or `abiray` for unattended `up` and `serve`; `--model` takes precedence |
 | `LLM_BIND` | 127.0.0.1 | listen address (see "Other devices") |
 | `HF_TOKEN` | none | your Hugging Face token, if anonymous downloads get rate-limited; sent only to the VM, deleted at stop |
-| `UNCENSOR` | saved | `0` serves ISTA-DASLab's original (censored) tensors |
+| `UNCENSOR` | saved | for `original`, `0` serves ISTA-DASLab's original tensors; Abiray requires `0` |
 | `DRAFT` | 1 | `0` turns off the draft model (slower) |
 | `LLM_YES` | unset | `1` answers yes to the install question and skips the settings questions |
 | `LLM_SESSION` | llm-ds41 | Colab session name |

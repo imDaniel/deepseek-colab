@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colab DeepSeek</title>
+<style>
+:root{color-scheme:light dark;font:15px/1.5 system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:Canvas;color:CanvasText}
+main{max-width:1000px;margin:auto;padding:28px 24px 64px}h1{font-size:24px;margin:0 0 5px}h2{font-size:17px;margin:0 0 16px}
+.intro,.hint{color:GrayText}.intro{margin:0 0 24px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.card,.settings{border:1px solid color-mix(in srgb,CanvasText 16%,transparent);border-radius:12px;padding:16px}
+.label{color:GrayText;font-size:13px}.value{font-size:21px;font-weight:650;margin-top:4px}.sub{font-size:12px;color:GrayText;margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px 20px}label{display:block;font-weight:600;font-size:14px}select,input[type=number]{display:block;width:100%;padding:9px;margin-top:6px;border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-radius:7px;background:Canvas;color:CanvasText;font:inherit}
+.check{display:flex;align-items:center;gap:9px;padding:8px 0}.check input{width:17px;height:17px}.hint{font-weight:400;font-size:12px;margin:5px 0 0}.actions{display:flex;gap:12px;align-items:center;margin-top:22px;flex-wrap:wrap}
+button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-radius:7px;padding:9px 16px;font:inherit;cursor:pointer;background:Canvas;color:CanvasText}button.primary{background:#315df5;color:#fff;border-color:#315df5;font-weight:600}button:disabled{opacity:.6;cursor:wait}.notice{font-size:13px;color:GrayText}.error{color:#cc3b40}.banner{margin:0 0 18px;padding:10px 12px;border-radius:8px;background:color-mix(in srgb,#e9a321 15%,Canvas);font-size:13px}footer{font-size:12px;color:GrayText;margin-top:18px}
+</style>
+</head>
+<body><main>
+<h1>Colab DeepSeek</h1><p class="intro">查看运行状态和计算单元；配置将在下一次启动 G4 时生效。</p>
+<section class="cards" aria-label="当前状态">
+  <div class="card"><div class="label">Colab 状态</div><div class="value" id="status">加载中…</div><div class="sub" id="stage"></div></div>
+  <div class="card"><div class="label">剩余计算单元</div><div class="value" id="balance">—</div><div class="sub" id="balance-note">按需刷新</div></div>
+  <div class="card"><div class="label">运行时间</div><div class="value" id="runtime">—</div><div class="sub" id="rate">—</div></div>
+  <div class="card"><div class="label">预计空闲停机</div><div class="value" id="idle">—</div><div class="sub" id="active">—</div></div>
+</section>
+<section class="settings"><h2>下次启动设置</h2>
+<p class="banner" id="pending" hidden>设置已保存；当前会话继续使用原设置，新设置在下次启动时生效。</p>
+<form id="form"><div class="grid">
+ <label>模型版本<select id="model"><option value="abiray">Abiray Uncensored · IQ2_XXS</option><option value="original_uncensored">项目 Uncensored · AtomicChat 补丁</option><option value="original_base">ISTA 原版权重 · 不打补丁</option></select><p class="hint">三种模式共享同一份兼容的编译缓存。</p></label>
+ <label>空闲停机<select id="idle_min"><option value="2">2 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select><p class="hint">API 无活动后的本地停机阈值；Colab 可提前结束会话。</p></label>
+ <label>最长连续运行<select id="max_hours"><option value="1">1 小时</option><option value="2">2 小时</option><option value="6">6 小时</option><option value="12">12 小时</option><option value="24">24 小时</option></select><p class="hint">本地强制停机上限，不延长 Colab 允许的运行时间。24 小时须符合 Colab 套餐条件，且不保证可用。</p></label>
+ <label>每次请求上下文<select id="context"><option value="32768">32K</option><option value="65536">64K</option><option value="131072">131K</option><option value="262144">262K</option></select><p class="hint">Abiray 的图像和较长上下文尚未实测。</p></label>
+ <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
+ <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
+ <div><label class="check"><input id="images" type="checkbox">启用图像输入</label><label class="check"><input id="draft" type="checkbox">启用 DSpark 草稿模型</label><p class="hint">Abiray 已包含修改，不会重复应用补丁。</p></div>
+</div><div class="actions"><button class="primary" id="save" type="button">保存设置</button><button id="refresh" type="button">刷新状态</button><span id="notice" class="notice" role="status"></span></div></form>
+<footer>状态由控制器和 Colab CLI 提供；余额约每分钟刷新。G4 可用性和实际扣费由 Colab 决定。</footer>
+</section></main>
+<script>
+(() => {
+ const $ = id => document.getElementById(id), fields=['idle_min','max_hours','context','effort','min_balance','images','draft'];
+ let dirty=false;
+ const fmt = n => n == null ? '—' : Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2});
+ const duration = s => {if(s == null)return '—';s=Math.max(0,Math.round(s));return Math.floor(s/3600)+'小时 '+Math.floor(s%3600/60)+'分 '+s%60+'秒'};
+ function paint(d){
+   const c=d.controller||{}, b=d.balance||{}, state=String(c.state||'unavailable');
+   $('status').textContent=state==='off'?'未运行':state==='starting'?'启动中':state.startsWith('ready')?'运行中':state==='stopping'?'停止中':'不可用';
+   $('stage').textContent=c.stage|| (c.has_error?'请检查控制器日志':'');
+   $('balance').textContent=fmt(b.value);$('balance-note').textContent=b.checked_at?'最近更新 '+new Date(b.checked_at*1000).toLocaleTimeString():'正在获取余额…';
+   $('runtime').textContent=duration(c.ran);$('rate').textContent=b.rate==null?'—':fmt(b.rate)+' 单元/小时';
+   $('idle').textContent=state.startsWith('ready')&&c.active===0?duration(c.idle_stop_min*60-c.idle_s):'—';
+   $('active').textContent=c.active?String(c.active)+' 个请求处理中':state.startsWith('ready')?'没有活动请求':'按请求自动启动';
+   $('pending').hidden=!d.pending;
+   if(!dirty&&d.desired){for(const k of fields){const el=$(k);if(el.type==='checkbox')el.checked=!!d.desired[k];else el.value=String(d.desired[k]);}$('model').value=d.desired.model==='abiray'?'abiray':d.desired.uncensor?'original_uncensored':'original_base';}
+ }
+ async function refresh(){try{const r=await fetch('./api/status',{cache:'no-store'});if(!r.ok)throw new Error('状态读取失败');paint(await r.json());}catch(e){$('status').textContent='不可用';$('stage').textContent=e.message;}}
+ $('form').addEventListener('input',()=>dirty=true);
+ $('save').addEventListener('click',async ()=>{const v={};for(const k of fields){const el=$(k);v[k]=el.type==='checkbox'?el.checked:['idle_min','max_hours','context','min_balance'].includes(k)?Number(el.value):el.value;}v.model=$('model').value==='abiray'?'abiray':'original';v.uncensor=$('model').value!=='original_base';
+  $('save').disabled=true;$('notice').className='notice';$('notice').textContent='保存中…';
+  try{const r=await fetch('./api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');dirty=false;$('notice').textContent='已保存，将在下次启动时生效。';await refresh();}catch(e){$('notice').className='notice error';$('notice').textContent=e.message;}finally{$('save').disabled=false;}
+ });
+ $('refresh').addEventListener('click',refresh);refresh();setInterval(refresh,10000);
+})();
+</script></body></html>

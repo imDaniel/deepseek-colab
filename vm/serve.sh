@@ -28,5 +28,5 @@ ARGS=(-m /content/model/DeepSeek-V4.1-Flash-1017-GSQ-RCO-$RUNG-00001-of-00006.gg
 echo "$BIN ${ARGS[*]}" > /content/res/serve_cmd.txt
 cd "$(dirname "$BIN")"
 rm -f /content/res/pin_result /content/res/pin_request
-LD_PRELOAD=/content/vm/libpin.so LD_LIBRARY_PATH="$(dirname "$BIN"):/usr/lib64-nvidia" setsid nohup "$BIN" "${ARGS[@]}" > /content/res/server.log 2>&1 < /dev/null &
+LD_PRELOAD=/content/vm/libpin.so LD_LIBRARY_PATH="$(dirname "$BIN"):/usr/local/cuda/lib64:/usr/lib64-nvidia" setsid nohup "$BIN" "${ARGS[@]}" > /content/res/server.log 2>&1 < /dev/null &
 echo $! > /content/res/server.pid

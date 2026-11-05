@@ -1,0 +1,10 @@
+{
+  "original": {
+    "backbone_url": "https://huggingface.co/ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF/resolve/a419d74cd28d5b9f8c5e2b9077d11a609c17bc32/",
+    "sizes": [5780704, 39535781184, 39736712000, 39036908384, 19923784832]
+  },
+  "abiray": {
+    "backbone_url": "https://huggingface.co/Abiray/DeepSeek-V4.1-Flash-1017-Uncensored-GSQ-RCO-IQ2_XXS-GGUF/resolve/7cd42ba35d96db00d89feef3582a6e63214a56be/",
+    "sizes": [5780704, 39661282624, 39851072320, 39111455584, 19951637632]
+  }
+}

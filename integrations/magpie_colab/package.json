@@ -1,0 +1,14 @@
+{
+  "name": "magpie-colab-deepseek",
+  "version": "0.1.0",
+  "description": "Colab DeepSeek status and next-start settings for Magpie",
+  "type": "module",
+  "main": "index.js",
+  "magpie": {
+    "page": {
+      "title": "Colab DeepSeek",
+      "file": "page/index.html",
+      "service": {"port": 18082}
+    }
+  }
+}

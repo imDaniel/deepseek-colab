@@ -3,6 +3,12 @@
 set -uo pipefail
 : "${CTX:?} ${UBATCH:?} ${MOE_CACHE_MIB:?} ${DYN:?} ${MMPROJ:?}"
 export RUNG=IQ2_XXS PORT=18081 DRAFT=${DRAFT:-1} UNCENSOR=${UNCENSOR:-1} WORKERS=${WORKERS:-64}
+export MODEL_VARIANT=${MODEL_VARIANT:-original}
+case "$MODEL_VARIANT" in
+  original) ;;
+  abiray) [ "$UNCENSOR" = 0 ] || { echo 'Abiray already includes the uncensor edit; UNCENSOR must be 0' >&2; exit 1; } ;;
+  *) echo "Unknown model variant: $MODEL_VARIANT" >&2; exit 1 ;;
+esac
 export LLAMA_DSV41_CED=1 LLAMA_DSV41_CED_SPEC=1
 export PIN=1 PIN_MAPPED=1 CACHE_RAM=1024 LLAMA_MOE_PAD_ZERO=1 LLAMA_MOE_CACHE_PIN_PREFILL=1 LLAMA_MOE_CACHE_DYN=$DYN
 export LLAMA_MOE_CACHE_PROFILE=/content/vm/profile-$RUNG.txt LLAMA_MOE_CACHE_RESIDENT=/content/res/resident.txt
@@ -19,7 +25,7 @@ T0=$(date +%s)
 st() { echo "$(( $(date +%s) - T0 ))s $(date +%T) $*" >> $R/timeline.txt; }
 seen() { grep -qE "$1" $R/timeline.txt; }
 hdr() { echo "Authorization: Bearer $(cat /content/secrets/key)"; }
-st "boot start ctx=$CTX ubatch=$UBATCH cache=$MOE_CACHE_MIB dyn=$DYN images=$MMPROJ draft=$DRAFT uncensored=$UNCENSOR"
+st "boot start model=$MODEL_VARIANT ctx=$CTX ubatch=$UBATCH cache=$MOE_CACHE_MIB dyn=$DYN images=$MMPROJ draft=$DRAFT uncensored=$UNCENSOR"
 mountpoint -q /mnt/ram || mount -t tmpfs -o size=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1000000 - 6 ))G tmpfs /mnt/ram
 mkdir -p $M
 
@@ -27,7 +33,7 @@ fetch() {  # $1 = backbone|engram|draft
   python3 $V/jobs.py $1 $M $R/j_$1.json >> $R/fetch.log 2>&1 && python3 $V/pfetch.py $R/j_$1.json --workers $WORKERS --chunk-mb 64 --tag $1 --log $R/fetch.log
 }
 
-{ bash $V/build.sh > $R/llama.log 2>&1 && st "llama.cpp built" || st "llama.cpp build FAILED"; } &
+{ bash $V/github-cache-build.sh > $R/llama.log 2>&1 && st "llama.cpp built" || st "llama.cpp build FAILED"; } &
 [ "$UNCENSOR" = 1 ] && { python3 -I $V/mkpatch.py /content/patch > $R/patch.log 2>&1 && st "uncensor patch fetched" || st "uncensor patch FAILED"; } &
 [ "$MMPROJ" = 1 ] && { MMPROJ_FETCH_ONLY=1 timeout 300 bash $V/serve.sh > $R/mmproj.log 2>&1 && st "image encoder fetched" || st "image encoder FAILED"; } &
 { fetch backbone && st "backbone fetched" || st "backbone FAILED"; } &

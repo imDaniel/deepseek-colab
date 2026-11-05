@@ -379,13 +379,13 @@ class ProxyTests(unittest.TestCase):
 
     def test_07b_opencode_launcher(self):
         c = Case(self)
-        self.assertIn('not running', c.llm('opencode').stderr)
         fake = os.path.join(c.dir, 'bin')
         os.makedirs(fake)
         with open(os.path.join(fake, 'opencode'), 'w') as f:
             f.write('#!/bin/sh\necho "config=$OPENCODE_CONFIG args=$*"\n')
         os.chmod(os.path.join(fake, 'opencode'), 0o755)
         c.env['PATH'] = fake + os.pathsep + c.env['PATH']
+        self.assertIn('not running', c.llm('opencode').stderr)
         self.assertEqual(c.llm('up', '--fast').returncode, 0)
         r = c.llm('opencode', '/some/project')
         self.assertEqual(r.stdout.strip(), 'config=%s args=/some/project' % os.path.join(c.state, 'opencode.json'))

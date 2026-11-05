@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/6ab03b08-6992-4fc6-8d6a-9c809c8c6336
 You need a Google AI Pro subscription (200 Colab compute units a month) or Colab Pro (100 a month), Python 3.9 or newer and an SSH client. It runs on Linux, macOS and Windows (PowerShell or cmd; type `python` if `python3` is not found).
 
 ```bash
-git clone https://github.com/leonxger/deepseek-colab.git deepseek-colab && cd deepseek-colab
+git clone https://github.com/imDaniel/deepseek-colab.git deepseek-colab && cd deepseek-colab
 python3 llm.py up
 ```
 
@@ -50,6 +50,19 @@ Starting a Colab G4 GPU · about 4 minutes
 ```
 
 The last line stays live: GPU on or off, the countdown to the automatic stop, the cost so far. Paste the base URL and key into any OpenAI-compatible app: Open WebUI, the OpenAI SDKs, curl. `python3 llm.py opencode` starts opencode already connected, in any shell. After 10 minutes without requests the GPU stops by itself, and the next request starts it again. `python3 llm.py down` stops everything right away.
+
+## Choose the model
+
+```bash
+python3 llm.py up --model original  # project default: ISTA weights, with optional AtomicChat patch
+python3 llm.py up --model abiray    # Abiray's pre-abliterated IQ2_XXS weights
+```
+
+The selection applies to the local endpoint and its automatic restarts. Stop the endpoint with `python3 llm.py down` before switching. `python3 llm.py settings` can save a default, and `LLM_MODEL=original` or `LLM_MODEL=abiray` can select a model for unattended `up` or `serve`; the command-line option takes precedence. The original model retains the existing uncensor setting. Abiray already includes its uncensor edit, so the separate AtomicChat patch is not applied. Both variants use the existing shared Engram and DSpark draft files.
+
+Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. The project Uncensored mode was also tested on a fresh G4 and successfully applied the AtomicChat patch. Image input, longer contexts, performance and sustained operation with Abiray have not been validated; the project's published performance numbers apply only to the original model.
+
+The startup scripts try to restore a pinned G4 binary from this repository's release. They verify its digest, build inputs, GPU, driver, CUDA and runtime environment before use, and fall back to compiling from source if the cache cannot be used.
 
 ## What you get
 

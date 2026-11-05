@@ -19,7 +19,7 @@ app --HTTP--> llm.py on 127.0.0.1:18080 --SSH tunnel (colab ssh --proxy-mode)-->
 | Command | Effect | Costs money? |
 | --- | --- | --- |
 | `python3 llm.py setup` | installs the CLI (asks), Google login, keys, `state/opencode.json` | no |
-| `python3 llm.py up [--fast]` | setup if needed, starts the GPU, prints base URL, API key, models; in a human terminal it then stays in a live view until Ctrl+C | **yes, about 9 compute units per hour until stopped** |
+| `python3 llm.py up [--fast] [--model original\|abiray]` | setup if needed, starts the GPU, prints base URL, API key, models; in a human terminal it then stays in a live view until Ctrl+C | **yes, about 9 compute units per hour until stopped** |
 | `python3 llm.py status` | endpoint state, Colab balance, session, base URL and key | no |
 | `python3 llm.py watch` | live view for a human terminal (countdown to the auto-stop, cost so far) | no |
 | `python3 llm.py settings` | asks for the saved defaults (image input, context, effort, idle stop, hard stop, uncensored) | no |
@@ -38,7 +38,7 @@ app --HTTP--> llm.py on 127.0.0.1:18080 --SSH tunnel (colab ssh --proxy-mode)-->
 5. **Never start `colab ssh --proxy-mode` yourself for a session that `colab sessions` does not list.** It silently creates a new paid VM. `llm.py` guards against this; don't bypass it.
 6. **Don't reorder or edit `vm/patches/`.** Later patches anchor on code that earlier ones insert, so `series` order matters, and the build commit is pinned.
 7. **Windows works natively** in PowerShell or cmd (`python llm.py up`); setup, login and start were tested there, although Google's CLI officially supports only Linux and macOS. WSL2 is the fallback.
-8. **Settings belong to the user.** Without a terminal, `up` asks nothing and uses `state/settings.json` or the defaults, and returns right after printing the endpoint. To change them, have the user run `python3 llm.py settings`, or edit `state/settings.json` with their OK: `images` (true or false), `context` (4096-262144 tokens), `effort` (1-100, `low`, `high`, `max`), `idle_min` (1-120), `max_hours` (1-24), `uncensor` (true or false).
+8. **Settings belong to the user.** Without a terminal, `up` asks nothing and uses `state/settings.json` or the defaults, and returns right after printing the endpoint. To change them, have the user run `python3 llm.py settings`, or edit `state/settings.json` with their OK: `images` (true or false), `context` (4096-262144 tokens), `effort` (1-100, `low`, `high`, `max`), `idle_min` (1-120), `max_hours` (1-24), `model` (`original` or `abiray`), `uncensor` (true or false, for the original model). Abiray includes its uncensor edit and must not receive the original patch. Stop the endpoint before switching models.
 
 ## Helping a user from zero
 

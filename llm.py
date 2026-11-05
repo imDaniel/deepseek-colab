@@ -8,7 +8,7 @@ import hmac, http.client, io, json, os, re, secrets, shlex, shutil, signal, sock
 import threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-USAGE = '''usage: python3 llm.py COMMAND [--fast]
+USAGE = '''usage: python3 llm.py COMMAND [--fast] [--model original|abiray]
   up            set up on first use, start the GPU and print the endpoint (base URL, API key, models)
   down          stop the GPU and the local endpoint
   status        endpoint state, Colab balance and session
@@ -20,8 +20,9 @@ USAGE = '''usage: python3 llm.py COMMAND [--fast]
   setup         install and log in only, start nothing
   serve         run the endpoint in the foreground (Ctrl+C stops the GPU too)
   --fast        this run only: text only, 131K context, the faster layout (118.7 instead of 105.6 tok/s)
+  --model       up/serve only: original (project model) or abiray (pre-abliterated IQ2_XXS)
 env: LLM_PORT (18080) LLM_IDLE_MIN (10) LLM_MAX_HOURS (6) LLM_MIN_BALANCE (5) LLM_IMAGES (0|1) LLM_CONTEXT (4096-262144)
-     LLM_PROFILE (default|fast presets) LLM_BIND (127.0.0.1)
+     LLM_PROFILE (default|fast presets) LLM_MODEL (original|abiray) LLM_BIND (127.0.0.1)
      HF_TOKEN (optional Hugging Face token for the downloads) LLM_YES=1 (answer yes to install prompts) LLM_BOOT_ENV ("K=V ...")
      LLM_SESSION LLM_COLAB LLM_STATE LLM_VM_DIR; tests: LLM_SSH_CMD LLM_TUNNEL_PORT LLM_POLL_S'''
 
@@ -32,7 +33,7 @@ KEY_FILE, SSH_KEY = os.path.join(STATE, 'api_key'), os.path.join(STATE, 'id_ed25
 SESSION, LOCK, LOG = (os.path.join(STATE, f) for f in ('session.json', 'serve.lock', 'llm.log'))
 SETTINGS_FILE = os.path.join(STATE, 'settings.json')
 VM_DIR = os.path.abspath(os.environ.get('LLM_VM_DIR') or os.path.join(ROOT, 'vm'))
-DEFAULTS = {'images': True, 'context': 262144, 'effort': '50', 'idle_min': 10, 'max_hours': 6, 'uncensor': True}
+DEFAULTS = {'images': True, 'context': 262144, 'effort': '50', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
 
 
 def load_settings():
@@ -237,6 +238,13 @@ def describe(images, context):
 
 def model_efforts():
     return (('ds41', str(SETTINGS['effort'])), ('ds41-max', 'max'))
+
+
+def model_variant():
+    value = os.environ.get('LLM_MODEL', SETTINGS['model'])
+    if value not in ('original', 'abiray'):
+        sys.exit('unknown model %r (use original or abiray)' % value)
+    return value
 
 
 def profile():
@@ -555,7 +563,8 @@ def missing_vm_files():
                 refs |= set(re.findall(r'(?:\$V|/content/vm)/([\w.-]+\.(?:py|sh|txt|c))\b', fh.read()))
         except OSError:
             refs.add(f)
-    refs |= {f for f in ('boot.sh', 'serve.sh', 'build.sh', 'patches/series')}
+    refs |= {f for f in ('boot.sh', 'serve.sh', 'build.sh', 'github-cache-build.sh',
+                          'github-cache-restore.py', 'models.json', 'patches/series')}
     if 'patches/series' in have:
         with open(os.path.join(VM_DIR, 'patches', 'series'), encoding='utf-8') as fh:
             refs |= {'patches/' + l.strip() for l in fh if l.strip() and not l.startswith('#')}
@@ -579,13 +588,18 @@ def build_bundle(path):
 
 
 def boot_vars():
-    env = dict(profile(), UNCENSOR='1' if SETTINGS['uncensor'] else '0')
+    variant = model_variant()
+    env = dict(profile(), MODEL_VARIANT=variant, UNCENSOR='1' if variant == 'original' and SETTINGS['uncensor'] else '0')
     env.update({k: os.environ[k] for k in BOOT_KEYS if k in os.environ})
     for kv in os.environ.get('LLM_BOOT_ENV', '').split():
         k, sep, v = kv.partition('=')
         if not sep:
             raise StartError('LLM_BOOT_ENV entry without "=": ' + kv)
         env[k] = v
+    if env['MODEL_VARIANT'] != variant:
+        raise StartError('select the model with --model or LLM_MODEL, not LLM_BOOT_ENV')
+    if variant == 'abiray' and env['UNCENSOR'] != '0':
+        raise StartError('Abiray already includes the uncensor edit; UNCENSOR must be 0')
     for k, v in env.items():
         if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', k) or "'" in v:
             raise StartError('bad boot env %s: names must be shell words, values must not contain single quotes' % k)
@@ -893,7 +907,7 @@ class Manager:
         self._check_stop()
         t0 = time.time()
         s = {'name': NAME, 'started': time.strftime('%Y-%m-%dT%H:%M:%S'), 'balance_start': bal, 't0': t0, 'stages': {}, 'serve': me(),
-             'choice': list(choice())}
+             'choice': list(choice()), 'model_variant': model_variant()}
         save_session(s)
         s['watchdog'] = spawn_watchdog(t0)
         save_session(s)
@@ -1226,8 +1240,6 @@ class Handler(BaseHTTPRequestHandler):
             if self.authed():
                 self.send_json(200, self.models())
             return
-        if body and path == '/v1/chat/completions':
-            body = with_effort(body)
         if body is not None and path.startswith('/v1/'):
             if self.authed():
                 t0 = time.time()
@@ -1280,6 +1292,10 @@ class Handler(BaseHTTPRequestHandler):
     def forward(self, body, sse=False):
         """Sends the request through the tunnel and pipes the answer back; sse means 200 and SSE headers were already sent."""
         mgr = self.server.mgr
+        # The on-demand controller may apply the next session's settings during
+        # acquire(), so fill defaults only after the session has been acquired.
+        if body and self.path.split('?')[0] == '/v1/chat/completions':
+            body = with_effort(body)
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
         for attempt in range(2):
             try:
@@ -1409,7 +1425,13 @@ def serve(detached=False):
     if not os.path.exists(KEY_FILE):
         sys.exit('missing %s; run: python3 llm.py setup' % KEY_FILE)
     profile()
-    held = take_lock({'port': PORT, 'detached': detached, 'choice': list(choice())})
+    boot_vars()
+    previous = load_session()
+    if previous and previous.get('model_variant', 'original') != model_variant() and session_alive():
+        sys.exit('The existing Colab session uses model %s. Stop it first: %s down' % (previous.get('model_variant', 'original'), cli()))
+    if not previous and model_variant() == 'abiray' and session_alive():
+        sys.exit('The existing Colab session has an unknown model. Stop it first: %s down' % cli())
+    held = take_lock({'port': PORT, 'detached': detached, 'choice': list(choice()), 'model_variant': model_variant()})
     if held:
         sys.exit('llm.py serve is already running (pid %s, port %s)' % (held.get('pid'), held.get('port')))
     try:
@@ -1424,8 +1446,8 @@ def serve(detached=False):
     if os.path.exists(SESSION):
         srv.mgr.adopt()
     threading.Thread(target=srv.mgr.monitor, daemon=True).start()
-    log('serve: http://%s:%d/v1, %s, session %s (idle stop %.1f min, hard stop %.1f h)'
-        % (HOST, PORT, describe(*choice()), NAME, IDLE_MIN, MAX_HOURS))
+    log('serve: http://%s:%d/v1, %s, model %s, session %s (idle stop %.1f min, hard stop %.1f h)'
+        % (HOST, PORT, describe(*choice()), model_variant(), NAME, IDLE_MIN, MAX_HOURS))
     try:
         srv.serve_forever(0.5)
     except KeyboardInterrupt:
@@ -1523,7 +1545,8 @@ def speed_note(images, context):
 
 def settings_summary():
     return ' · '.join((describe(*choice()), 'effort %s' % SETTINGS['effort'], 'idle stop %g min' % IDLE_MIN, 'hard stop %g h' % MAX_HOURS,
-                       'uncensored' if SETTINGS['uncensor'] else 'original model'))
+                       'Abiray IQ2_XXS (pre-abliterated)' if model_variant() == 'abiray' else
+                       ('project original · uncensored patch' if SETTINGS['uncensor'] else 'project original · base weights')))
 
 
 def choose_settings(force=False):
@@ -1548,7 +1571,9 @@ def choose_settings(force=False):
     new['effort'] = pick('Effort', 'ds41: 1-100, low, high, max', old['effort'], effort_value)
     new['idle_min'] = pick('Idle stop', 'minutes, 1-120', old['idle_min'], lambda t: number(t, 1, 120))
     new['max_hours'] = pick('Hard stop', 'hours, 1-24', old['max_hours'], lambda t: number(t, 1, 24))
-    new['uncensor'] = pick('Model', 'y uncensored, n original', 'y' if old['uncensor'] else 'n', yes_no)
+    new['model'] = pick('Model', 'original or abiray', old['model'], lambda t: t if t in ('original', 'abiray') else None)
+    if new['model'] == 'original':
+        new['uncensor'] = pick('Uncensor', 'y apply patch, n base', 'y' if old['uncensor'] else 'n', yes_no)
     with open(SETTINGS_FILE, 'w') as f:
         json.dump(new, f, indent=2)
     SETTINGS.update(new)
@@ -1741,8 +1766,11 @@ def cmd_setup():
 
 def cmd_up():
     print(paint('DeepSeek V4.1 Flash on Colab', 'bold') + '\n')
+    boot_vars()
     bal = setup()
     held = serve_running()
+    if held and held.get('model_variant', 'original') != model_variant():
+        sys.exit('The endpoint runs model %s. To change it, stop it first: %s down' % (held.get('model_variant', 'original'), cli()))
     if held and held.get('choice') != list(choice()):
         sys.exit('The endpoint runs with %s. To change that, stop it first: %s down'
                  % (describe(*held['choice']) if held.get('choice') else 'other settings', cli()))
@@ -1750,6 +1778,8 @@ def cmd_up():
         sys.exit('Colab balance %.2f compute units is below LLM_MIN_BALANCE %.0f' % (bal, MIN_BALANCE))
     if not held:
         choose_settings()
+        boot_vars()
+        print('  Model: %s' % model_variant())
         with open(os.path.join(STATE, 'serve.out'), 'wb') as out:
             p = spawn_detached([sys.executable, os.path.realpath(__file__), 'serve', '--detached'], out)
         t0 = time.time()
@@ -1813,6 +1843,7 @@ def cmd_status():
                     st['state'], mmss(st['idle_s']), minutes(st['idle_stop_min']), st['served'], '' if st['served'] == 1 else 's',
                     mmss(st['ran'] or 0), units(st['cu'] or 0))
             rows += [('Endpoint', 'http://%s:%d/v1 · %s' % (HOST, held['port'], describe(*held['choice']) if held.get('choice') else '')),
+                     ('Model', held.get('model_variant', 'original')),
                      ('GPU', gpu)]
             if st.get('last_error'):
                 rows.append(('Last error', st['last_error']))
@@ -1919,6 +1950,15 @@ def cmd_opencode(args):
 def main():
     args = sys.argv[1:]
     cmd = args[0] if args else 'help'
+    model_args = [i for i, arg in enumerate(args) if arg == '--model' or arg.startswith('--model=')]
+    if model_args and cmd in ('up', 'serve'):
+        if len(model_args) != 1:
+            sys.exit('use --model once: original or abiray')
+        i = model_args[0]
+        value = args[i].partition('=')[2] if '=' in args[i] else (args[i + 1] if i + 1 < len(args) else '')
+        if value not in ('original', 'abiray'):
+            sys.exit('--model must be original or abiray')
+        os.environ['LLM_MODEL'] = CHILD_ENV['LLM_MODEL'] = value
     if sys.stdout is not None and hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(errors='replace')
     if '--fast' in args and cmd not in ('ask', 'opencode'):
@@ -1938,6 +1978,8 @@ def main():
             commands[cmd]()
         else:
             sys.exit(USAGE)
+    except StartError as e:
+        sys.exit(str(e))
     except KeyboardInterrupt:
         print()
         if cmd == 'up' and serve_running():
