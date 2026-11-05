@@ -6,20 +6,25 @@ from pathlib import Path
 
 DEFAULTS = {
     'idle_min': 10, 'max_hours': 6, 'model': 'original', 'images': True,
-    'context': 32768, 'effort': 'max', 'uncensor': True, 'draft': True,
+    'context': 262144, 'effort': 'max', 'uncensor': True, 'draft': True,
     'min_balance': 5,
 }
 CHOICES = {
     'idle_min': (2, 10, 30, 60), 'max_hours': (1, 2, 6, 12, 24),
-    'model': ('original', 'abiray'), 'context': (32768, 65536, 131072, 262144, 524288, 1048576),
+    'model': ('original', 'abiray'), 'context': (262144, 524288),
     'effort': ('low', 'high', 'max'),
 }
 
 
-def validate(value):
+LEGACY_CONTEXTS = (32768, 65536, 131072, 262144, 524288, 1048576)
+
+
+def validate(value, legacy=False):
     if not isinstance(value, dict) or set(value) != set(DEFAULTS):
         raise ValueError('settings fields do not match the supported options')
     for key, options in CHOICES.items():
+        if key == 'context' and legacy:
+            options = LEGACY_CONTEXTS
         if isinstance(value[key], bool) or value[key] not in options:
             raise ValueError('invalid ' + key)
     for key in ('images', 'uncensor', 'draft'):
@@ -39,7 +44,14 @@ def read(path, default=True):
         if default:
             return dict(DEFAULTS)
         raise
-    return validate(data)
+    return validate(data, legacy=True)
+
+
+def read_desired(path):
+    value = read(path)
+    if value['context'] not in CHOICES['context']:
+        value['context'] = 262144 if value['context'] <= 262144 else 524288
+    return validate(value)
 
 
 def write(path, value):

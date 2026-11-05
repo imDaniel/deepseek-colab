@@ -94,7 +94,7 @@ def controller_status():
         if r.status != 200:
             raise ValueError('controller unavailable')
         # Never expose the controller's raw errors or credentials to the page.
-        keys = ('state', 'stage', 'active', 'served', 'ran', 'cu', 'idle_s',
+        keys = ('state', 'stage', 'active', 'inflight', 'max_inflight', 'decode_slots', 'served', 'ran', 'cu', 'idle_s',
                 'idle_stop_min', 'max_hours', 'started', 'last_stop')
         result = {k: body.get(k) for k in keys}
         result['has_error'] = bool(body.get('last_error'))
@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         if path != '/api/status':
             return self.send(404, {'error': 'not found'})
         try:
-            desired = config.read(DESIRED)
+            desired = config.read_desired(DESIRED)
             current = controller_status()
             active = config.read(ACTIVE, default=False) if current['state'] not in ('off', 'unavailable') else None
             return self.send(200, {'desired': desired, 'active_settings': active,

@@ -58,6 +58,7 @@ TUNNEL_PORT = int(os.environ.get('LLM_TUNNEL_PORT', '0'))
 POLL_S = float(os.environ.get('LLM_POLL_S', '15'))
 HEALTH_S = min(1.0, POLL_S)
 BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 3600
+MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 32768
 COLAB_CLI = 'google-colab-cli==0.7.5'
 # Estimate from the current G4 account rate; Colab may change its rates.
 G4_CU_PER_HOUR = 10.05
@@ -257,12 +258,14 @@ def profile():
     images, context = choice()
     lay = LAYOUTS[layout(images, context)]
     slots = 1 if context > 262144 else 2
-    # Only this exact ISTA + patch configuration has been exercised at 1M.
-    ista_1m = (context == 1048576 and images and model_variant() == 'original' and
-                SETTINGS.get('uncensor') and SETTINGS.get('draft', True))
-    cache_mib = '66000' if ista_1m else lay['MOE_CACHE_MIB']
+    # Cache tuning is scoped to the exercised patched ISTA + images + draft model.
+    ista_patched = (images and model_variant() == 'original' and
+                    SETTINGS.get('uncensor') and SETTINGS.get('draft', True))
+    ista_512k = context == 524288 and ista_patched
+    cache_mib = ('66000' if context == 1048576 and ista_patched else
+                 '70430' if ista_512k else lay['MOE_CACHE_MIB'])
     return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': cache_mib,
-            'DYN': lay['DYN'], 'DMA': lay['DMA']}
+            'DYN': '110' if ista_512k else lay['DYN'], 'DMA': lay['DMA']}
 
 
 COLAB = colab_cmd()
@@ -731,6 +734,7 @@ class Manager:
         self.state, self.steps, self.attempt, self.errors, self.begun = 'off', [], 0, {}, 0.0
         self.fail_until, self.fail_msg, self.stop_reason = 0.0, '', None
         self.active, self.last_activity, self.served = 0, time.time(), 0
+        self.inflight = 0
         self.tunnel, self.port, self.tunnel_ok, self.repairing = None, None, False, False
         self.sess, self.closing, self.last_retry = None, False, 0.0
         self.tlock, self.no_tunnel, self.last_stop = threading.Lock(), False, None
@@ -738,6 +742,19 @@ class Manager:
 
     def ready(self):
         return self.state == 'ready' and self.tunnel_ok
+
+    def admit(self):
+        """Include startup waiters and requests queued by the model backend."""
+        with self.cond:
+            if self.inflight >= MAX_INFLIGHT:
+                return False
+            self.inflight += 1
+            return True
+
+    def release_admission(self):
+        with self.cond:
+            self.inflight -= 1
+            self.cond.notify_all()
 
     def enter(self):
         with self.cond:
@@ -1158,7 +1175,8 @@ class Manager:
             return {'state': state, 'stage': self.activity() if self.state == 'starting' else '', 'session': NAME, 'active': self.active,
                     'served': self.served, 'ran': ran, 'cu': ran / 3600 * G4_CU_PER_HOUR if ran is not None else None,
                     'last_stop': self.last_stop, 'idle_s': round(time.time() - self.last_activity), 'idle_stop_min': IDLE_MIN, 'max_hours': MAX_HOURS,
-                    'started': s.get('started'), 'stages': s.get('stages'), 'last_error': self.fail_msg or None, 'pid': os.getpid()}
+                    'started': s.get('started'), 'stages': s.get('stages'), 'last_error': self.fail_msg or None, 'pid': os.getpid(),
+                    'inflight': self.inflight, 'max_inflight': MAX_INFLIGHT, 'decode_slots': int(profile()['SLOTS'])}
 
 
 def with_effort(body):
@@ -1178,6 +1196,27 @@ def with_effort(body):
 
 def error_obj(code, msg, kind='unavailable_error'):
     return {'error': {'code': code, 'message': msg, 'type': kind}}
+
+
+def with_output_limit(body, path):
+    """Validate a bounded generation budget before acquiring the GPU."""
+    if path not in ('/v1/chat/completions', '/v1/responses'):
+        return body
+    req = json.loads(body)
+    if not isinstance(req, dict):
+        raise ValueError('request body must be a JSON object')
+    fields = ('max_output_tokens',) if path == '/v1/responses' else ('max_tokens', 'max_completion_tokens', 'n_predict')
+    present = [key for key in fields if key in req]
+    if len(present) > 1:
+        raise ValueError('use only one output-token limit')
+    key = present[0] if present else fields[0]
+    value = req.get(key, MAX_OUTPUT_TOKENS)
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_OUTPUT_TOKENS:
+        raise ValueError('%s must be an integer from 1 to %d' % (key, MAX_OUTPUT_TOKENS))
+    if key != fields[0]:
+        del req[key]
+    req[fields[0]] = value
+    return json.dumps(req).encode()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1272,7 +1311,8 @@ class Handler(BaseHTTPRequestHandler):
     def models(self):
         info = profile()
         return {'object': 'list', 'data': [{'id': m, 'object': 'model', 'owned_by': 'llm.py', 'created': 0, 'reasoning_effort': e,
-                                            'context_length': int(info['CTX']) // int(info['SLOTS']), 'image_input': info['MMPROJ'] == '1',
+                                            'context_length': int(info['CTX']) // int(info['SLOTS']),
+                                            'max_output_tokens': MAX_OUTPUT_TOKENS, 'image_input': info['MMPROJ'] == '1',
                                             'modalities': {'input': ['text', 'image'] if info['MMPROJ'] == '1' else ['text'],
                                                            'output': ['text']}} for m, e in model_efforts()]}
 
@@ -1288,9 +1328,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         if body is not None and path.startswith('/v1/'):
             if self.authed():
+                try:
+                    body = with_output_limit(body, path)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    return self.fail(400, str(exc), obj=error_obj(400, str(exc), 'invalid_request_error'))
+                if not mgr.admit():
+                    return self.fail(429, 'at most four requests may be in progress; retry after one completes',
+                                     obj=error_obj(429, 'at most four requests may be in progress; retry after one completes', 'rate_limit_error'))
                 t0 = time.time()
-                self.held(body)
-                log('%s %s done in %.1f s' % (self.command, path, time.time() - t0), echo=False)
+                try:
+                    self.held(body)
+                finally:
+                    mgr.release_admission()
+                    log('%s %s done in %.1f s' % (self.command, path, time.time() - t0), echo=False)
             return
         if body is None and mgr.ready():
             return self.forward(None)

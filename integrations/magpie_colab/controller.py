@@ -13,7 +13,7 @@ ACTIVE = Path(llm.STATE) / 'magpie-active-settings.json'
 
 
 def apply_settings(settings):
-    settings = config.validate(settings)
+    settings = config.validate(settings, legacy=True)
     llm.SETTINGS = dict(settings)
     llm.IDLE_MIN = float(settings['idle_min'])
     llm.MAX_HOURS = float(settings['max_hours'])
@@ -39,14 +39,14 @@ def boot_vars():
 def install():
     # A restart with an existing session must adopt its original settings,
     # not a pending model selection saved in the management page.
-    settings = config.read(ACTIVE, default=False) if llm.load_session() else config.read(DESIRED)
+    settings = config.read(ACTIVE, default=False) if llm.load_session() else config.read_desired(DESIRED)
     apply_settings(settings)
     llm.boot_vars = boot_vars
     original_begin = llm.Manager._begin
 
     def begin(manager, new):
         if new:
-            settings = config.read(DESIRED)
+            settings = config.read_desired(DESIRED)
             apply_settings(settings)
             config.write(ACTIVE, settings)
         return original_begin(manager, new)
@@ -59,7 +59,7 @@ def install():
         manager = handler.server.mgr
         with manager.cond:
             if manager.state == 'off':
-                apply_settings(config.read(DESIRED))
+                apply_settings(config.read_desired(DESIRED))
             return original_models(handler)
 
     llm.Handler.models = models

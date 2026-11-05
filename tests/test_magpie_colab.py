@@ -64,13 +64,17 @@ class SettingsTests(unittest.TestCase):
         status['controller']['state'] = 'unavailable'
         self.assertIsNone(refresh.effective(status))
 
-    def test_measured_ista_1m_cache_does_not_change_other_profiles(self):
+    def test_measured_ista_cache_does_not_change_other_profiles(self):
         env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
         cases = [
             ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': True}, '66000'),
             ({'model': 'abiray', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
-            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '70430'),
+            ({'model': 'abiray', 'uncensor': False, 'context': 524288, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': False, 'context': 524288, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': False, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': False}, '64000'),
             ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': False, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': False}, '64000'),
         ]
@@ -86,7 +90,7 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(llm.context_value('1M'), 1048576)
             info = llm.profile()
             self.assertEqual((info['CTX'], info['SLOTS'], info['MMPROJ']), ('1048576', '1', '1'))
-            self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576))['context'], 1048576)
+            self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576), legacy=True)['context'], 1048576)
             handler = object.__new__(llm.Handler)
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
             self.assertEqual(handler.models()['data'][0]['modalities']['input'], ['text', 'image'])
@@ -198,20 +202,20 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
-            config.write(controller.DESIRED, dict(config.DEFAULTS, context=1048576))
+            config.write(controller.DESIRED, dict(config.DEFAULTS, context=524288))
             controller.install()
             manager = llm.Manager()
             handler = object.__new__(llm.Handler)
             handler.server = mock.Mock(mgr=manager)
-            self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
+            self.assertEqual(handler.models()['data'][0]['context_length'], 524288)
             manager.state = 'ready'
-            config.write(controller.DESIRED, dict(config.DEFAULTS, context=32768, images=False))
+            config.write(controller.DESIRED, dict(config.DEFAULTS, context=262144, images=False))
             active = handler.models()['data'][0]
-            self.assertEqual(active['context_length'], 1048576)
+            self.assertEqual(active['context_length'], 524288)
             self.assertEqual(active['modalities']['input'], ['text', 'image'])
             manager.state = 'off'
             desired = handler.models()['data'][0]
-            self.assertEqual(desired['context_length'], 32768)
+            self.assertEqual(desired['context_length'], 262144)
             self.assertEqual(desired['modalities']['input'], ['text'])
 
 

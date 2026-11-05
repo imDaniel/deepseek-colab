@@ -62,6 +62,8 @@ The selection applies to the local endpoint and its automatic restarts. Stop the
 
 Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. With a 1M allocation and image input enabled, it correctly identified a test image and answered a synthetic 1,000,054-token prompt in 674 seconds. The project Uncensored mode was tested on a fresh G4 and successfully applied the AtomicChat patch. Sustained operation, long-context accuracy on realistic material and image quality with Abiray have not been established; the project's published performance numbers apply only to the original model.
 
+The Magpie integration offers two context tiers: 262,144 and 524,288 tokens, a 32,768-token maximum output budget including reasoning, and up to four accepted requests with backend queueing. Additional requests receive HTTP 429; invalid or excessive output budgets receive HTTP 400 before starting a GPU. See [the integration guide](integrations/magpie_colab/README.md) for settings, client compaction and logs. The CLI retains its legacy context options for compatibility.
+
 The startup scripts try to restore a pinned G4 binary from this repository's release. They verify its digest, build inputs, GPU, driver, CUDA and runtime environment before use, and fall back to compiling from source if the cache cannot be used.
 
 ## What you get

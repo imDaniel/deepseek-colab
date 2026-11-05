@@ -37,7 +37,8 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
  <label>模型版本<select id="model"><option value="original_base">ISTA 原版权重</option><option value="original_uncensored">ISTA 权重 + AtomicChat 补丁</option><option value="abiray">Abiray Uncensored</option></select><p class="hint">三种模式共享同一份兼容的编译缓存。</p></label>
  <label>空闲停机<select id="idle_min"><option value="2">2 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select><p class="hint">API 无活动后的本地停机阈值；Colab 可提前结束会话。</p></label>
  <label>最长连续运行<select id="max_hours"><option value="1">1 小时</option><option value="2">2 小时</option><option value="6">6 小时</option><option value="12">12 小时</option><option value="24">24 小时</option></select><p class="hint">本地强制停机上限，不延长 Colab 允许的运行时间。24 小时须符合 Colab 套餐条件，且不保证可用。</p></label>
- <label>每次请求上下文<select id="context"><option value="32768">32K</option><option value="65536">64K</option><option value="131072">131K</option><option value="262144">262K</option><option value="524288">512K</option><option value="1048576">1M</option></select><p class="hint">512K 和 1M 使用单并发及较小的 GPU 缓存；1M 已通过单次长输入测试，持续稳定性有待验证。</p></label>
+ <label>每次请求上下文<select id="context"><option value="262144">262,144 token（256K）</option><option value="524288">524,288 token（512K）</option></select><p class="hint">最多接收 4 个在途请求；256K 档使用两个解码槽，512K 档使用一个，其余请求排队。</p></label>
+ <div><label>每次请求最大输出</label><p>32,768 token</p><p class="hint">包含思考与正文。API 可请求更少的输出；达到上限可能截断回答。建议客户端分别在 220,000 / 460,000 token 左右压缩历史。</p></div>
  <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
  <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
  <div><label class="check"><input id="images" type="checkbox">启用图像输入</label><label class="check"><input id="draft" type="checkbox">启用 DSpark 草稿模型</label><p class="hint">Abiray 已包含修改，不会重复应用补丁。</p></div>
@@ -57,7 +58,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
    $('balance').textContent=fmt(b.value);$('balance-note').textContent=b.checked_at?'最近更新 '+new Date(b.checked_at*1000).toLocaleTimeString():'正在获取余额…';
    $('runtime').textContent=duration(c.ran);$('rate').textContent=b.rate==null?'—':fmt(b.rate)+' 单元/小时';
    $('idle').textContent=state.startsWith('ready')&&c.active===0?duration(c.idle_stop_min*60-c.idle_s):'—';
-   $('active').textContent=c.active?String(c.active)+' 个请求处理中':state.startsWith('ready')?'没有活动请求':'按请求自动启动';
+   $('active').textContent=c.inflight?String(c.inflight)+' / '+String(c.max_inflight||4)+' 个在途请求，'+String(c.decode_slots||'—')+' 个解码槽':state.startsWith('ready')?'没有活动请求':'按请求自动启动';
    $('pending').hidden=!d.pending;
    if(!dirty&&d.desired){for(const k of fields){const el=$(k);if(el.type==='checkbox')el.checked=!!d.desired[k];else el.value=String(d.desired[k]);}$('model').value=d.desired.model==='abiray'?'abiray':d.desired.uncensor?'original_uncensored':'original_base';}
  }
