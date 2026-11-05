@@ -59,7 +59,8 @@ POLL_S = float(os.environ.get('LLM_POLL_S', '15'))
 HEALTH_S = min(1.0, POLL_S)
 BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 3600
 COLAB_CLI = 'google-colab-cli==0.7.5'
-G4_CU_PER_HOUR = 8.9
+# Estimate from the current G4 account rate; Colab may change its rates.
+G4_CU_PER_HOUR = 10.05
 # the two GPU memory layouts measured on the G4: 'default' fits images and 262K per request, 'fast' text only up to 131K
 LAYOUTS = {'default': {'UBATCH': '2048', 'MOE_CACHE_MIB': '70430', 'DYN': '110', 'DMA': '0', 'SPEED': '105.6'},
            'fast': {'UBATCH': '3072', 'MOE_CACHE_MIB': '74231', 'DYN': '166', 'DMA': '1', 'SPEED': '118.7'},
@@ -256,7 +257,11 @@ def profile():
     images, context = choice()
     lay = LAYOUTS[layout(images, context)]
     slots = 1 if context > 262144 else 2
-    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': lay['MOE_CACHE_MIB'],
+    # Only this exact ISTA + patch configuration has been exercised at 1M.
+    ista_1m = (context == 1048576 and images and model_variant() == 'original' and
+                SETTINGS.get('uncensor') and SETTINGS.get('draft', True))
+    cache_mib = '66000' if ista_1m else lay['MOE_CACHE_MIB']
+    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': cache_mib,
             'DYN': lay['DYN'], 'DMA': lay['DMA']}
 
 
@@ -729,6 +734,7 @@ class Manager:
         self.tunnel, self.port, self.tunnel_ok, self.repairing = None, None, False, False
         self.sess, self.closing, self.last_retry = None, False, 0.0
         self.tlock, self.no_tunnel, self.last_stop = threading.Lock(), False, None
+        self.health_failures, self.health_checking, self.last_health_check = 0, False, 0.0
 
     def ready(self):
         return self.state == 'ready' and self.tunnel_ok
@@ -736,6 +742,7 @@ class Manager:
     def enter(self):
         with self.cond:
             if self.ready():
+                self.health_failures = 0
                 self.active += 1
                 return True
         return False
@@ -753,6 +760,7 @@ class Manager:
         while True:
             with self.cond:
                 if self.ready():
+                    self.health_failures = 0
                     self.active += 1
                     return None
                 if mine is not None and mine in self.errors:
@@ -823,8 +831,10 @@ class Manager:
         log('start failed: ' + err)
         self._stop('start failed')
 
-    def request_stop(self, reason, only_idle=False):
+    def request_stop(self, reason, only_idle=False, only_inactive=False):
         with self.cond:
+            if only_inactive and (self.state != 'ready' or self.active != 0):
+                return
             if only_idle and not (self.state == 'ready' and self.active == 0 and
                                   time.time() - self.last_activity > IDLE_MIN * 60):
                 return
@@ -1086,6 +1096,27 @@ class Manager:
             self.repairing, self.tunnel_ok = True, False
         threading.Thread(target=self._repair, daemon=True).start()
 
+    def _check_idle_health(self, attempt, port):
+        """Stop an idle VM after repeated backend failures, without probing active work."""
+        with self.cond:
+            if self.state != 'ready' or self.active or self.attempt != attempt or self.port != port:
+                self.health_checking = False
+                self.health_failures = 0
+                return
+        try:
+            ok = tunnel_health(port, timeout=5)
+        except Exception:
+            ok = False
+        with self.cond:
+            self.health_checking = False
+            if self.state != 'ready' or self.active or self.attempt != attempt or self.port != port:
+                self.health_failures = 0
+                return
+            self.health_failures = 0 if ok else self.health_failures + 1
+            failed = self.health_failures >= 3
+        if failed:
+            self.request_stop('backend health check failed', only_inactive=True)
+
     def monitor(self):
         while True:
             time.sleep(0.5)
@@ -1098,6 +1129,14 @@ class Manager:
                 self.request_stop('idle %.1f min' % IDLE_MIN, only_idle=True)
                 if p is not None and p.poll() is not None:
                     self._start_repair()
+                with self.cond:
+                    check = (self.state == 'ready' and self.tunnel_ok and self.port is not None and
+                             self.active == 0 and not self.health_checking and now - self.last_health_check >= 20)
+                    if check:
+                        self.health_checking, self.last_health_check = True, now
+                        attempt, port = self.attempt, self.port
+                if check:
+                    threading.Thread(target=self._check_idle_health, args=(attempt, port), daemon=True).start()
             elif st == 'off' and os.path.exists(SESSION) and now - self.last_retry > 60:
                 self.last_retry = now
                 self.request_stop('retrying the stop')

@@ -226,6 +226,17 @@ class Case:
 
 
 class ProxyTests(unittest.TestCase):
+    def test_dead_backend_stops_the_idle_session(self):
+        c = Case(self)
+        p = c.serve()
+        self.assertEqual(c.req().status, 200)
+        os.kill(int(read(c.res('server.pid'))), signal.SIGKILL)
+        c.wait(lambda: 'backend health check failed' in c.log(), 80)
+        c.wait(lambda: c.sessions() == {}, 20)
+        c.wait(lambda: c.session_json() is None, 20)
+        c.assert_all_stopped(self)
+        self.assertIsNone(p.poll())
+
     def test_01_stream_first_request(self):
         c = Case(self, FAKE_BOOT_S='6')
         c.serve()

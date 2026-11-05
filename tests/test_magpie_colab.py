@@ -18,6 +18,42 @@ with mock.patch.dict(sys.modules, {'llm': llm}):
 
 
 class SettingsTests(unittest.TestCase):
+    def test_dead_backend_is_stopped_only_after_repeated_idle_failures(self):
+        mgr = llm.Manager()
+        mgr.state, mgr.tunnel_ok, mgr.port, mgr.attempt = 'ready', True, 12345, 1
+        with mock.patch.object(llm, 'tunnel_health', return_value=False), mock.patch.object(mgr, 'request_stop') as stop:
+            mgr._check_idle_health(1, 12345)
+            mgr._check_idle_health(1, 12345)
+            stop.assert_not_called()
+            mgr._check_idle_health(1, 12345)
+            stop.assert_called_once_with('backend health check failed', only_inactive=True)
+            stop.reset_mock()
+            mgr.active = 1
+            mgr._check_idle_health(1, 12345)
+            stop.assert_not_called()
+            self.assertEqual(mgr.health_failures, 0)
+        mgr.active = 1
+        mgr.request_stop('backend health check failed', only_inactive=True)
+        self.assertEqual(mgr.state, 'ready')
+
+    def test_backend_recovery_resets_failures_and_idle_failure_stops(self):
+        mgr = llm.Manager()
+        mgr.state, mgr.tunnel_ok, mgr.port, mgr.attempt = 'ready', True, 12345, 2
+        stopped = threading.Event()
+        idle_since = mgr.last_activity
+        with mock.patch.object(llm, 'tunnel_health', side_effect=[False, False, True, False, False, False]), \
+                mock.patch.object(mgr, '_stop', side_effect=lambda reason: stopped.set()) as stop:
+            for _ in range(3):
+                mgr._check_idle_health(2, 12345)
+            self.assertEqual(mgr.health_failures, 0)
+            self.assertEqual(mgr.state, 'ready')
+            self.assertEqual(mgr.last_activity, idle_since)
+            for _ in range(3):
+                mgr._check_idle_health(2, 12345)
+            self.assertEqual(mgr.state, 'stopping')
+            self.assertTrue(stopped.wait(1))
+            stop.assert_called_once_with('backend health check failed')
+
     def test_catalog_refresh_tracks_active_settings_until_session_stops(self):
         active = dict(config.DEFAULTS, context=1048576)
         desired = dict(config.DEFAULTS, context=32768)
@@ -27,6 +63,21 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(refresh.effective(status), desired)
         status['controller']['state'] = 'unavailable'
         self.assertIsNone(refresh.effective(status))
+
+    def test_measured_ista_1m_cache_does_not_change_other_profiles(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        cases = [
+            ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': True}, '66000'),
+            ({'model': 'abiray', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': False, 'draft': True}, '64000'),
+            ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': False}, '64000'),
+        ]
+        with mock.patch.dict(os.environ, env, clear=True):
+            for changes, expected in cases:
+                with self.subTest(changes=changes), mock.patch.object(llm, 'SETTINGS', dict(config.DEFAULTS, **changes)):
+                    self.assertEqual(llm.profile()['MOE_CACHE_MIB'], expected)
 
     def test_long_context_reserves_one_full_million_token_slot(self):
         env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
@@ -179,6 +230,7 @@ class PanelTests(unittest.TestCase):
                 c.request('GET', '/api/status'); r = c.getresponse(); data = json.loads(r.read())
                 self.assertEqual(r.status, 200)
                 self.assertEqual(data['desired']['model'], 'original')
+                self.assertTrue(data['desired']['uncensor'])
                 self.assertEqual(data['balance']['value'], 20)
                 c.close()
                 value = dict(config.DEFAULTS, model='original', idle_min=2)
