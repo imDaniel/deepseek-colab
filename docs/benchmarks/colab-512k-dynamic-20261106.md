@@ -2,6 +2,8 @@
 
 This experiment compares the existing 70,430/512/110 expert-cache/UBATCH/DYN profile with a larger dynamic reservation. It measures complete code generation as well as actual long-input requests. The context window is 524,288 input-plus-generated tokens per request, the output limit is 32,768, and there is one decoder slot. Four accepted clients share that slot through queueing.
 
+The optional 1M profile was subsequently [tuned separately](colab-1m-dynamic-20261106.md). References below to an unchanged 66,000/512/50 1M profile describe the state during this 512K experiment; the 512K configuration and measurements remain unchanged.
+
 ## Conditions
 
 ISTA IQ2_XXS + AtomicChat, image input enabled, DSpark enabled at draft depth 2, max reasoning effort, the same cached b11963 binary (SHA-256 `fe01a69712365f81331b71e9e1409f27182a92b808fcbe123df5f1c48de10aa8`). DMA remains disabled as required by the image path. We did not change weights, quantization, routed expert count, C++/CUDA code, draft depth or the decoder slot count. No new compiled release is required.

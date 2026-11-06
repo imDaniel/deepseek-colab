@@ -70,7 +70,8 @@ LAYOUTS = {'default': {'UBATCH': '2048', 'MOE_CACHE_MIB': '70430', 'DYN': '110',
 PATCHED_ISTA_PROFILES = {
     262144: {'MOE_CACHE_MIB': '73000', 'UBATCH': '1024', 'DYN': '166'},
     524288: {'MOE_CACHE_MIB': '73000', 'UBATCH': '512', 'DYN': '166'},
-    1048576: {'MOE_CACHE_MIB': '66000', 'UBATCH': '512', 'DYN': '50'},
+    1048576: {'MOE_CACHE_MIB': '68864', 'UBATCH': '512', 'DYN': '80',
+              'LLAMA_DSV41_IDX_CHUNK_MIB': '128'},
 }
 CONTEXTS = {'32k': 32768, '64k': 65536, '128k': 131072, '131k': 131072, '256k': 262144, '262k': 262144,
             '512k': 524288, '1m': 1048576}
@@ -270,9 +271,12 @@ def profile():
     values = {key: lay[key] for key in ('UBATCH', 'MOE_CACHE_MIB', 'DYN', 'DMA')}
     if ista_patched:
         values.update(PATCHED_ISTA_PROFILES.get(context, {}))
-    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': values['UBATCH'],
+    boot = {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': values['UBATCH'],
             'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': values['MOE_CACHE_MIB'],
             'DYN': values['DYN'], 'DMA': values['DMA']}
+    if 'LLAMA_DSV41_IDX_CHUNK_MIB' in values:
+        boot['LLAMA_DSV41_IDX_CHUNK_MIB'] = values['LLAMA_DSV41_IDX_CHUNK_MIB']
+    return boot
 
 
 COLAB = colab_cmd()

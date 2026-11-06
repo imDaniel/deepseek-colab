@@ -107,6 +107,7 @@ Each start spends about 4 minutes (about 0.6 units) on downloading and loading. 
 - [AGENT_START_HERE.md](AGENT_START_HERE.md): point your AI coding agent here and it can set things up and help you.
 - [docs/how-it-works.md](docs/how-it-works.md): the memory layout, the boot sequence and every patch.
 - [512K dynamic-cache results](docs/benchmarks/colab-512k-dynamic-20261106.md): the current default profile, complete-code generation, cold/warm 480K inputs and resource checks.
+- [1M dynamic-cache results](docs/benchmarks/colab-1m-dynamic-20261106.md): the optional experimental profile, complete-code and actual million-input performance, memory and prefix reuse.
 - [G4 context tuning results](docs/benchmarks/colab-1m-20261106.md): the earlier 512K cache change and measured 1M throughput, latency and limits.
 - [256K tuning results](docs/benchmarks/colab-256k-20261106.md): two-slot expert-cache tuning, complete-code checks, queued clients and prefill tradeoffs.
 

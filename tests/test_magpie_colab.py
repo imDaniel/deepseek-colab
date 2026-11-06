@@ -67,7 +67,7 @@ class SettingsTests(unittest.TestCase):
     def test_measured_ista_cache_does_not_change_other_profiles(self):
         env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
         cases = [
-            ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': True}, '66000'),
+            ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': True}, '68864'),
             ({'model': 'abiray', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '73000'),
@@ -91,7 +91,7 @@ class SettingsTests(unittest.TestCase):
             info = llm.profile()
             self.assertEqual((info['CTX'], info['SLOTS'], info['MMPROJ']), ('1048576', '1', '1'))
             self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576))['context'], 1048576)
-            self.assertEqual((info['MOE_CACHE_MIB'], info['UBATCH'], info['DYN']), ('66000', '512', '50'))
+            self.assertEqual((info['MOE_CACHE_MIB'], info['UBATCH'], info['DYN']), ('68864', '512', '80'))
             handler = object.__new__(llm.Handler)
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
             self.assertEqual(handler.models()['data'][0]['modalities']['input'], ['text', 'image'])
@@ -132,6 +132,23 @@ class SettingsTests(unittest.TestCase):
                     info = llm.profile()
                     self.assertEqual(tuple(info[key] for key in ('MOE_CACHE_MIB', 'UBATCH', 'DYN')), expected)
                     self.assertEqual((info['CTX'], info['SLOTS'], info['DMA']), ('524288', '1', '0'))
+
+    def test_million_index_chunk_reaches_boot_env_only_for_the_tuned_profile(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        key = 'LLAMA_DSV41_IDX_CHUNK_MIB'
+        cases = [({}, '128'), ({'context': 262144}, None), ({'context': 524288}, None),
+                 ({'context': 786432}, None), ({'model': 'abiray'}, None),
+                 ({'uncensor': False}, None), ({'images': False}, None), ({'draft': False}, None)]
+        with mock.patch.dict(os.environ, env, clear=True):
+            for changes, expected in cases:
+                settings = dict(config.DEFAULTS, context=1048576)
+                settings.update(changes)
+                with self.subTest(changes=changes), mock.patch.object(llm, 'SETTINGS', settings):
+                    self.assertEqual(llm.boot_vars().get(key), expected)
+            with mock.patch.object(llm, 'SETTINGS', dict(config.DEFAULTS, context=1048576)):
+                self.assertIn(key + "='128'", llm.boot_env())
+                with mock.patch.dict(os.environ, {'LLM_BOOT_ENV': key + '=64'}):
+                    self.assertEqual(llm.boot_vars()[key], '64')
 
     def test_first_request_uses_settings_applied_at_wake(self):
         handler = object.__new__(llm.Handler)
