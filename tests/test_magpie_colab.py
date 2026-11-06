@@ -96,6 +96,25 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
             self.assertEqual(handler.models()['data'][0]['modalities']['input'], ['text', 'image'])
 
+    def test_tuned_256k_preserves_two_slots_and_other_feature_profiles(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        cases = [
+            ({}, ('73000', '1024', '166')),
+            ({'model': 'abiray'}, ('70430', '2048', '110')),
+            ({'uncensor': False}, ('70430', '2048', '110')),
+            ({'images': False}, ('70430', '2048', '110')),
+            ({'draft': False}, ('70430', '2048', '110')),
+            ({'context': 131072}, ('70430', '2048', '110')),
+        ]
+        with mock.patch.dict(os.environ, env, clear=True):
+            for changes, expected in cases:
+                settings = dict(config.DEFAULTS, context=262144)
+                settings.update(changes)
+                with self.subTest(changes=changes), mock.patch.object(llm, 'SETTINGS', settings):
+                    info = llm.profile()
+                    self.assertEqual(tuple(info[key] for key in ('MOE_CACHE_MIB', 'UBATCH', 'DYN')), expected)
+                    self.assertEqual((info['SLOTS'], info['DMA']), ('2', '0'))
+
     def test_first_request_uses_settings_applied_at_wake(self):
         handler = object.__new__(llm.Handler)
         manager = mock.Mock()

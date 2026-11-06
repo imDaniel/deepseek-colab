@@ -66,6 +66,12 @@ G4_CU_PER_HOUR = 10.05
 LAYOUTS = {'default': {'UBATCH': '2048', 'MOE_CACHE_MIB': '70430', 'DYN': '110', 'DMA': '0', 'SPEED': '105.6'},
            'fast': {'UBATCH': '3072', 'MOE_CACHE_MIB': '74231', 'DYN': '166', 'DMA': '1', 'SPEED': '118.7'},
            'long': {'UBATCH': '512', 'MOE_CACHE_MIB': '64000', 'DYN': '50', 'DMA': '0', 'SPEED': 'unmeasured'}}
+# G4 overrides scoped below to ISTA + AtomicChat, images and DSpark.
+PATCHED_ISTA_PROFILES = {
+    262144: {'MOE_CACHE_MIB': '73000', 'UBATCH': '1024', 'DYN': '166'},
+    524288: {'MOE_CACHE_MIB': '70430', 'UBATCH': '512', 'DYN': '110'},
+    1048576: {'MOE_CACHE_MIB': '66000', 'UBATCH': '512', 'DYN': '50'},
+}
 CONTEXTS = {'32k': 32768, '64k': 65536, '128k': 131072, '131k': 131072, '256k': 262144, '262k': 262144,
             '512k': 524288, '1m': 1048576}
 BOOT_KEYS = ('CTX', 'SLOTS', 'UBATCH', 'MMPROJ', 'MOE_CACHE_MIB', 'DYN', 'DMA', 'DRAFT', 'UNCENSOR', 'WORKERS')
@@ -261,11 +267,12 @@ def profile():
     # Cache tuning is scoped to the exercised patched ISTA + images + draft model.
     ista_patched = (images and model_variant() == 'original' and
                     SETTINGS.get('uncensor') and SETTINGS.get('draft', True))
-    ista_512k = context == 524288 and ista_patched
-    cache_mib = ('66000' if context == 1048576 and ista_patched else
-                 '70430' if ista_512k else lay['MOE_CACHE_MIB'])
-    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': lay['UBATCH'], 'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': cache_mib,
-            'DYN': '110' if ista_512k else lay['DYN'], 'DMA': lay['DMA']}
+    values = {key: lay[key] for key in ('UBATCH', 'MOE_CACHE_MIB', 'DYN', 'DMA')}
+    if ista_patched:
+        values.update(PATCHED_ISTA_PROFILES.get(context, {}))
+    return {'CTX': str(slots * context), 'SLOTS': str(slots), 'UBATCH': values['UBATCH'],
+            'MMPROJ': '1' if images else '0', 'MOE_CACHE_MIB': values['MOE_CACHE_MIB'],
+            'DYN': values['DYN'], 'DMA': values['DMA']}
 
 
 COLAB = colab_cmd()
