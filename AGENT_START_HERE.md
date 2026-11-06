@@ -17,6 +17,8 @@ app --HTTP--> llm.py on 127.0.0.1:18080 --SSH tunnel (colab ssh --proxy-mode)-->
 
 ## Commands
 
+The credential-free [saved configuration](configs/colab-optimized-20261106.json) records current Magpie defaults and all three boot profiles; it is a dated snapshot, not an automatically loaded override. See [the tier comparison](docs/benchmarks/colab-context-tiers-20261106.md) and [repository privacy policy](docs/privacy.md) before publishing changes. Runtime source remains authoritative.
+
 | Command | Effect | Costs money? |
 | --- | --- | --- |
 | `python3 llm.py setup` | installs the CLI (asks), Google login, keys, `state/opencode.json` | no |

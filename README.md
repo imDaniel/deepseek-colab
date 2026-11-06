@@ -103,6 +103,8 @@ Each start spends about 4 minutes (about 0.6 units) on downloading and loading. 
 
 ## Read next
 
+- [Saved configuration](configs/colab-optimized-20261106.json) and [three-tier comparison](docs/benchmarks/colab-context-tiers-20261106.md): current defaults, scoped boot parameters, complete-code timings and memory headroom.
+- [Repository privacy](docs/privacy.md): credential exclusions, secret scanning and Git identity review.
 - [SETUP.md](SETUP.md): every platform, settings, connecting apps, troubleshooting.
 - [AGENT_START_HERE.md](AGENT_START_HERE.md): point your AI coding agent here and it can set things up and help you.
 - [docs/how-it-works.md](docs/how-it-works.md): the memory layout, the boot sequence and every patch.

@@ -4,3 +4,25 @@ __pycache__/
 
 # Private runtime diagnostics, local infrastructure and benchmark artifacts.
 /experiments/
+
+# Local credentials, runtime output and downloaded release artifacts.
+.DS_Store
+.env
+.env.*
+!.env.example
+/.config/
+/.ssh/
+/secrets/
+/credentials/
+id_ed25519*
+id_rsa*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+client_secret*.json
+*.log
+*.log.*
+*.tar.gz
+*.tgz

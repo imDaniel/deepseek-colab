@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public environment-variable name used in the index-chunk regression test"
+regexTarget = "secret"
+regexes = ['''^LLAMA_DSV41_IDX_CHUNK_MIB$''']

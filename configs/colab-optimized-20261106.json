@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-06",
+  "purpose": "Credential-free snapshot; runtime source remains authoritative.",
+  "scope": {
+    "model": "original",
+    "uncensor": true,
+    "images": true,
+    "draft": true
+  },
+  "settings": {
+    "idle_min": 10,
+    "max_hours": 6,
+    "model": "original",
+    "images": true,
+    "context": 524288,
+    "effort": "max",
+    "uncensor": true,
+    "draft": true,
+    "min_balance": 5
+  },
+  "limits": {
+    "max_output_tokens": 32768,
+    "max_inflight_including_queue": 4,
+    "draft_max": 2
+  },
+  "profiles": {
+    "262144": {
+      "context_per_request": 262144,
+      "input_budget_with_32768_output": 229376,
+      "experimental": false,
+      "boot": {
+        "CTX": "524288",
+        "SLOTS": "2",
+        "UBATCH": "1024",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "73000",
+        "DYN": "166",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original"
+      }
+    },
+    "524288": {
+      "context_per_request": 524288,
+      "input_budget_with_32768_output": 491520,
+      "experimental": false,
+      "boot": {
+        "CTX": "524288",
+        "SLOTS": "1",
+        "UBATCH": "512",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "73000",
+        "DYN": "166",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original"
+      }
+    },
+    "1048576": {
+      "context_per_request": 1048576,
+      "input_budget_with_32768_output": 1015808,
+      "experimental": true,
+      "boot": {
+        "CTX": "1048576",
+        "SLOTS": "1",
+        "UBATCH": "512",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "68864",
+        "DYN": "80",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original",
+        "LLAMA_DSV41_IDX_CHUNK_MIB": "128"
+      }
+    }
+  }
+}
