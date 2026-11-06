@@ -284,7 +284,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(r.status, 200)
         data = json.loads(r.raw)['data']
         self.assertEqual([m['id'] for m in data], ['ds41', 'ds41-max'])
-        self.assertEqual((data[0]['context_length'], data[0]['image_input']), (262144, True))
+        self.assertEqual((data[0]['context_length'], data[0]['image_input']), (524288, True))
         self.assertEqual(c.req(method='GET', path='/v1/models', auth=False).status, 401)
         self.assertEqual(c.req(host='evil.example:%d' % c.port).status, 403)
         self.assertEqual(c.calls('new'), [])
@@ -316,7 +316,8 @@ class ProxyTests(unittest.TestCase):
         self.assertLess(again.t_headers, 1.0)
         self.assertEqual(len(c.calls('new')), 1)
         env = json.loads(read(c.res('boot_check.json')))['env']
-        self.assertEqual((env['FAKE_MODE'], env['X_EXTRA'], env['CTX'], env['UBATCH']), ('fail', '1', '524288', '2048'))
+        self.assertEqual((env['FAKE_MODE'], env['X_EXTRA'], env['CTX'], env['UBATCH']), ('fail', '1', '524288', '512'))
+        self.assertEqual((env['SLOTS'], env['MOE_CACHE_MIB'], env['DYN']), ('1', '70430', '110'))
 
     def test_04_idle_stop_and_restart(self):
         c = Case(self, LLM_IDLE_MIN='0.05')
@@ -548,7 +549,7 @@ class UnitTests(unittest.TestCase):
         cfg = json.loads(read(os.path.join(L.STATE, 'opencode.json')))['provider']['ds41']
         self.assertEqual(cfg['options']['baseURL'], 'http://127.0.0.1:18080/v1')
         self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (1800000, 900000))
-        self.assertEqual(cfg['models']['ds41-max']['limit']['context'], 262144)
+        self.assertEqual(cfg['models']['ds41-max']['limit']['context'], 524288)
         self.assertEqual(cfg['models']['ds41']['modalities']['input'], ['text', 'image'])
 
     def test_vm_files_in_sync(self):

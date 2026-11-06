@@ -88,13 +88,19 @@ class RequestLimits(unittest.TestCase):
         with self.assertRaises(ConnectionResetError): h.route(b'{}')
         self.assertEqual(h.server.mgr.inflight, 0)
 
-    def test_two_new_tiers_preserve_existing_active_snapshots(self):
-        self.assertEqual(config.CHOICES['context'], (262144, 524288))
-        for legacy, desired in ((32768, 262144), (1048576, 524288)):
+    def test_context_tiers_preserve_saved_million_and_legacy_snapshots(self):
+        self.assertEqual(config.DEFAULTS['context'], 524288)
+        self.assertEqual(config.CHOICES['context'], (262144, 524288, 1048576))
+        for legacy, desired in ((32768, 262144), (65536, 262144), (131072, 262144)):
             with tempfile.TemporaryDirectory() as temp:
                 p = Path(temp) / 'settings.json'; p.write_text(json.dumps(dict(config.DEFAULTS, context=legacy)))
                 self.assertEqual(config.read(p)['context'], legacy)
                 self.assertEqual(config.read_desired(p)['context'], desired)
                 with self.assertRaises(ValueError): config.write(p, dict(config.DEFAULTS, context=legacy))
+        with tempfile.TemporaryDirectory() as temp:
+            p = Path(temp) / 'settings.json'
+            self.assertEqual(config.read_desired(p)['context'], 524288)
+            config.write(p, dict(config.DEFAULTS, context=1048576))
+            self.assertEqual(config.read_desired(p)['context'], 1048576)
 
 if __name__ == '__main__': unittest.main()

@@ -33,7 +33,7 @@ KEY_FILE, SSH_KEY = os.path.join(STATE, 'api_key'), os.path.join(STATE, 'id_ed25
 SESSION, LOCK, LOG = (os.path.join(STATE, f) for f in ('session.json', 'serve.lock', 'llm.log'))
 SETTINGS_FILE = os.path.join(STATE, 'settings.json')
 VM_DIR = os.path.abspath(os.environ.get('LLM_VM_DIR') or os.path.join(ROOT, 'vm'))
-DEFAULTS = {'images': True, 'context': 262144, 'effort': '50', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
+DEFAULTS = {'images': True, 'context': 524288, 'effort': '50', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
 
 
 def load_settings():
@@ -219,7 +219,7 @@ def short_context(n):
 
 def choice():
     """Image input and context per request in effect: LLM_PROFILE or --fast presets, then LLM_IMAGES and LLM_CONTEXT, then the settings."""
-    images, context = bool(SETTINGS['images']), context_value(SETTINGS['context']) or 262144
+    images, context = bool(SETTINGS['images']), context_value(SETTINGS['context']) or DEFAULTS['context']
     preset = os.environ.get('LLM_PROFILE')
     if preset:
         if preset not in ('default', 'fast'):
@@ -1634,7 +1634,7 @@ def yes_no(text):
 def speed_note(images, context):
     """What the chosen pair runs at, and why a smaller context alone is not faster."""
     if context > 262144:
-        return 'experimental long context · one request at a time · speed unmeasured'
+        return 'long context · one decoder slot · workload-dependent speed'
     note = 'about %s tok/s' % LAYOUTS[layout(images, context)]['SPEED']
     if images:
         return note + ' · smaller contexts work but are not faster'
@@ -1664,7 +1664,7 @@ def choose_settings(force=False):
     print('%s  %s\n' % (paint('Settings', 'bold'), paint('Enter keeps the value in brackets', 'dim')))
     old, new = SETTINGS, dict(SETTINGS)
     new['images'] = pick('Images', 'image input, y or n', 'y' if old['images'] else 'n', yes_no)
-    new['context'] = pick('Context', '32K, 64K, 131K, 262K, 512K or 1M', short_context(context_value(old['context']) or 262144), context_value)
+    new['context'] = pick('Context', '32K, 64K, 131K, 262K, 512K or 1M', short_context(context_value(old['context']) or DEFAULTS['context']), context_value)
     print('  %s%s' % (' ' * 12, paint(speed_note(new['images'], new['context']), 'dim')))
     new['effort'] = pick('Effort', 'ds41: 1-100, low, high, max', old['effort'], effort_value)
     new['idle_min'] = pick('Idle stop', 'minutes, 1-120', old['idle_min'], lambda t: number(t, 1, 120))

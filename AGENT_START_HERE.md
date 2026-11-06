@@ -13,6 +13,7 @@ app --HTTP--> llm.py on 127.0.0.1:18080 --SSH tunnel (colab ssh --proxy-mode)-->
 - `llm.py` (stdlib only) is the whole client. It installs Google's Colab CLI if asked, logs in, creates keys, allocates the VM with `colab new --gpu G4`, uploads `vm/`, runs `vm/boot.sh`, holds the tunnel, proxies requests, and stops the VM when idle.
 - `vm/boot.sh` downloads the weights from Hugging Face into a RAM disk, splices in the uncensored tensors (`vm/mkpatch.py`, `vm/applypatch.py`), builds llama.cpp b11963 with `vm/patches/series` (`vm/build.sh`), starts the server (`vm/serve.sh`), frees RAM that the GPU already holds (`vm/punch.py`), pins the cold experts (`vm/pin.c`), fills the Engram table, and finally opens port 18080 (`vm/gate.py`).
 - Image input and context per request are separate settings, mapped to two measured GPU memory layouts in `LAYOUTS` in `llm.py`: text only up to 131,072 tokens runs at 118.7 tok/s; image input on, or more context, runs at 105.6 tok/s (up to 262,144 tokens per request). `--fast` is the text-only 131K preset.
+- New installations default to 524,288 tokens per request. Magpie offers 262,144, 524,288 and experimental 1,048,576 tiers; 512K/1M use one decoder slot with up to four accepted requests including queueing. Patched ISTA with images and DSpark uses the tested 70,430/512/110 cache/UBATCH/DYN profile at 512K and the conservative 66,000/512/50 profile at 1M. See [the benchmark](docs/benchmarks/colab-1m-20261106.md).
 
 ## Commands
 

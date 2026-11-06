@@ -90,7 +90,8 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(llm.context_value('1M'), 1048576)
             info = llm.profile()
             self.assertEqual((info['CTX'], info['SLOTS'], info['MMPROJ']), ('1048576', '1', '1'))
-            self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576), legacy=True)['context'], 1048576)
+            self.assertEqual(config.validate(dict(config.DEFAULTS, context=1048576))['context'], 1048576)
+            self.assertEqual((info['MOE_CACHE_MIB'], info['UBATCH'], info['DYN']), ('66000', '512', '50'))
             handler = object.__new__(llm.Handler)
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
             self.assertEqual(handler.models()['data'][0]['modalities']['input'], ['text', 'image'])
@@ -217,6 +218,9 @@ class SettingsTests(unittest.TestCase):
             desired = handler.models()['data'][0]
             self.assertEqual(desired['context_length'], 262144)
             self.assertEqual(desired['modalities']['input'], ['text'])
+            config.write(controller.DESIRED, dict(config.DEFAULTS, context=1048576))
+            self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
+            self.assertEqual(config.read_desired(controller.DESIRED)['context'], 1048576)
 
 
 class PanelTests(unittest.TestCase):
@@ -270,10 +274,11 @@ class PanelTests(unittest.TestCase):
                 c.request('GET', '/api/status'); r = c.getresponse(); data = json.loads(r.read())
                 self.assertEqual(r.status, 200)
                 self.assertEqual(data['desired']['model'], 'original')
+                self.assertEqual(data['desired']['context'], 524288)
                 self.assertTrue(data['desired']['uncensor'])
                 self.assertEqual(data['balance']['value'], 20)
                 c.close()
-                value = dict(config.DEFAULTS, model='original', idle_min=2)
+                value = dict(config.DEFAULTS, model='original', idle_min=2, context=1048576)
                 c = http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=5)
                 c.request('POST', '/api/config', body=json.dumps(value), headers={'Content-Type': 'application/json'})
                 r = c.getresponse(); r.read(); self.assertEqual(r.status, 200); c.close()

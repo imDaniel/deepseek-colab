@@ -6,12 +6,12 @@ from pathlib import Path
 
 DEFAULTS = {
     'idle_min': 10, 'max_hours': 6, 'model': 'original', 'images': True,
-    'context': 262144, 'effort': 'max', 'uncensor': True, 'draft': True,
+    'context': 524288, 'effort': 'max', 'uncensor': True, 'draft': True,
     'min_balance': 5,
 }
 CHOICES = {
     'idle_min': (2, 10, 30, 60), 'max_hours': (1, 2, 6, 12, 24),
-    'model': ('original', 'abiray'), 'context': (262144, 524288),
+    'model': ('original', 'abiray'), 'context': (262144, 524288, 1048576),
     'effort': ('low', 'high', 'max'),
 }
 

@@ -40,7 +40,7 @@ Starting a Colab G4 GPU · about 4 minutes
   Base URL   http://127.0.0.1:18080/v1
   API key    sk-ds41-3f9c...
   Models     ds41 (effort 50) · ds41-max (effort max)
-  Context    262,144 tokens per request · image input on · about 105.6 tok/s
+  Context    524,288 tokens per request · image input on · one decoder slot
 
   Try it     python3 llm.py ask "Hello!"
   opencode   python3 llm.py opencode [project folder]
@@ -62,13 +62,15 @@ The selection applies to the local endpoint and its automatic restarts. Stop the
 
 Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. With a 1M allocation and image input enabled, it correctly identified a test image and answered a synthetic 1,000,054-token prompt in 674 seconds. The project Uncensored mode was tested on a fresh G4 and successfully applied the AtomicChat patch. Sustained operation, long-context accuracy on realistic material and image quality with Abiray have not been established; the project's published performance numbers apply only to the original model.
 
-The Magpie integration offers two context tiers: 262,144 and 524,288 tokens, a 32,768-token maximum output budget including reasoning, and up to four accepted requests with backend queueing. Additional requests receive HTTP 429; invalid or excessive output budgets receive HTTP 400 before starting a GPU. See [the integration guide](integrations/magpie_colab/README.md) for settings, client compaction and logs. The CLI retains its legacy context options for compatibility.
+The Magpie integration defaults to 524,288 tokens, with 262,144 and experimental 1,048,576-token options, a 32,768-token maximum output budget including reasoning, and up to four accepted requests with backend queueing. Additional requests receive HTTP 429; invalid or excessive output budgets receive HTTP 400 before starting a GPU. See [the integration guide](integrations/magpie_colab/README.md) for settings, client compaction and logs. The CLI retains its legacy context options for compatibility.
 
 The startup scripts try to restore a pinned G4 binary from this repository's release. They verify its digest, build inputs, GPU, driver, CUDA and runtime environment before use, and fall back to compiling from source if the cache cannot be used.
 
 ## What you get
 
-| | Images on (default) | Text only, up to 131K (`--fast`) |
+The table below records the original reference layouts. The current default is 512K; see [the context tuning results](docs/benchmarks/colab-1m-20261106.md) for its measurements.
+
+| | Images on, 262K reference | Text only, up to 131K (`--fast`) |
 | --- | --- | --- |
 | Decode speed | 105.6 tok/s | 118.7 tok/s |
 | Context per request | 262,144 tokens | 131,072 tokens |
