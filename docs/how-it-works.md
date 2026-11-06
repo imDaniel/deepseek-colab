@@ -30,6 +30,8 @@ Each token picks 6 of the 384 routed experts in every layer, and the choice is s
 
 RAM is the binding limit. The cache size and slot count of the two layouts in `LAYOUTS` (`llm.py`) were measured so that RAM never drops below 2 GB, even with a 245K-token prompt.
 
+The table above describes the original reference layout. Scoped overrides in `PATCHED_ISTA_PROFILES` now tune patched ISTA with images and DSpark at 256K, 512K and experimental 1M. The default 512K uses one decoder slot, 73,000 MiB expert cache, UBATCH 512 and DYN 166 with per-group caps. See [its measurements and limitations](benchmarks/colab-512k-dynamic-20261106.md); the reference residency and memory figures do not apply to every profile.
+
 ## The boot sequence
 
 `vm/boot.sh` writes a timeline that `llm.py logs` shows:

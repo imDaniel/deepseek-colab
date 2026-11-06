@@ -69,7 +69,7 @@ LAYOUTS = {'default': {'UBATCH': '2048', 'MOE_CACHE_MIB': '70430', 'DYN': '110',
 # G4 overrides scoped below to ISTA + AtomicChat, images and DSpark.
 PATCHED_ISTA_PROFILES = {
     262144: {'MOE_CACHE_MIB': '73000', 'UBATCH': '1024', 'DYN': '166'},
-    524288: {'MOE_CACHE_MIB': '70430', 'UBATCH': '512', 'DYN': '110'},
+    524288: {'MOE_CACHE_MIB': '73000', 'UBATCH': '512', 'DYN': '166'},
     1048576: {'MOE_CACHE_MIB': '66000', 'UBATCH': '512', 'DYN': '50'},
 }
 CONTEXTS = {'32k': 32768, '64k': 65536, '128k': 131072, '131k': 131072, '256k': 262144, '262k': 262144,

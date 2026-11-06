@@ -317,7 +317,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(len(c.calls('new')), 1)
         env = json.loads(read(c.res('boot_check.json')))['env']
         self.assertEqual((env['FAKE_MODE'], env['X_EXTRA'], env['CTX'], env['UBATCH']), ('fail', '1', '524288', '512'))
-        self.assertEqual((env['SLOTS'], env['MOE_CACHE_MIB'], env['DYN']), ('1', '70430', '110'))
+        self.assertEqual((env['SLOTS'], env['MOE_CACHE_MIB'], env['DYN']), ('1', '73000', '166'))
 
     def test_04_idle_stop_and_restart(self):
         c = Case(self, LLM_IDLE_MIN='0.05')

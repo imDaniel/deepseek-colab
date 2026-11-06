@@ -68,7 +68,7 @@ The startup scripts try to restore a pinned G4 binary from this repository's rel
 
 ## What you get
 
-The table below records the original reference layouts. The current default is 512K; see [the context tuning results](docs/benchmarks/colab-1m-20261106.md) for its measurements.
+The table below records the original reference layouts. The current default is 512K; see [the latest 512K measurements](docs/benchmarks/colab-512k-dynamic-20261106.md) for complete-code speed, long-input latency and limitations.
 
 | | Images on, 262K reference | Text only, up to 131K (`--fast`) |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ The table below records the original reference layouts. The current default is 5
 | First token, 8K / 32K prompt | 9.9 / 27.8 s | 8.8 / 23.4 s |
 | Follow-up turns (prompt cache) | about 1 s | about 1 s |
 
-Image input and context size are separate settings. Text only up to 131K gets the faster memory layout; contexts up to 262K with images use the other measured layout. Both serve two requests at a time, with tool calling and separate reasoning output. Speeds are the average of six fixed answers at reasoning effort max. Contexts above 262K use an experimental single-request layout with lower batch size and expert cache; the performance figures do not apply.
+Image input and context size are separate settings. Text only up to 131K gets the faster reference layout. Contexts up to 262K use two decoder slots; 512K and experimental 1M use one, with up to four accepted clients including queueing. Tool calling and separate reasoning output are supported. The reference speeds above average six fixed answers at reasoning effort max and do not describe the newer scoped cache profiles for patched ISTA with images and DSpark; see the benchmarks below.
 
 ## What it costs
 
@@ -106,7 +106,8 @@ Each start spends about 4 minutes (about 0.6 units) on downloading and loading. 
 - [SETUP.md](SETUP.md): every platform, settings, connecting apps, troubleshooting.
 - [AGENT_START_HERE.md](AGENT_START_HERE.md): point your AI coding agent here and it can set things up and help you.
 - [docs/how-it-works.md](docs/how-it-works.md): the memory layout, the boot sequence and every patch.
-- [G4 context tuning results](docs/benchmarks/colab-1m-20261106.md): the applied 512K cache change and measured 1M throughput, latency and limits.
+- [512K dynamic-cache results](docs/benchmarks/colab-512k-dynamic-20261106.md): the current default profile, complete-code generation, cold/warm 480K inputs and resource checks.
+- [G4 context tuning results](docs/benchmarks/colab-1m-20261106.md): the earlier 512K cache change and measured 1M throughput, latency and limits.
 - [256K tuning results](docs/benchmarks/colab-256k-20261106.md): two-slot expert-cache tuning, complete-code checks, queued clients and prefill tradeoffs.
 
 ## Credits

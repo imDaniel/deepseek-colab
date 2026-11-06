@@ -121,7 +121,7 @@ The first `up` asks for these and saves them in `state/settings.json`; `python3 
 | Setting | Default | Choices |
 | --- | --- | --- |
 | Images | on | image input on or off |
-| Context | 512K | tokens per request: 32K, 64K, 131K, 262K, 512K or 1M, or any number from 4,096 to 1,048,576. Text only up to 131K and contexts up to 262K use the original measured layouts. 512K uses the measured single-slot cache profile for patched ISTA with images and DSpark. 1M retains the conservative experimental single-slot profile; million-token cold prefill takes about 11–12 minutes. See [the tuning measurements](docs/benchmarks/colab-1m-20261106.md) for scope and limitations. |
+| Context | 512K | tokens per request: 32K, 64K, 131K, 262K, 512K or 1M, or any number from 4,096 to 1,048,576. Patched ISTA with images and DSpark uses scoped measured cache profiles at 262K and 512K. Other combinations retain their reference layouts. 512K has one decoder slot with up to four accepted clients including queueing. See [the latest 512K measurements](docs/benchmarks/colab-512k-dynamic-20261106.md). 1M retains its conservative experimental single-slot profile; million-token cold prefill takes about 11–12 minutes. See [the 1M measurements](docs/benchmarks/colab-1m-20261106.md) for scope and limitations. |
 | Reasoning effort of `ds41` | 50 | 1-100, `low` (50), `high` (75) or `max`. `ds41-max` always uses max. A request's own `reasoning_effort` wins. |
 | Idle stop | 10 minutes | 1-120 minutes without requests, then the GPU stops |
 | Hard stop | 6 hours | 1-24 hours, then the GPU stops whatever happens |

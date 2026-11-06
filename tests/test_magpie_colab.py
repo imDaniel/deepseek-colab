@@ -70,7 +70,7 @@ class SettingsTests(unittest.TestCase):
             ({'model': 'original', 'uncensor': True, 'context': 1048576, 'images': True, 'draft': True}, '66000'),
             ({'model': 'abiray', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': False, 'context': 1048576, 'images': True, 'draft': True}, '64000'),
-            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '70430'),
+            ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': True, 'draft': True}, '73000'),
             ({'model': 'abiray', 'uncensor': False, 'context': 524288, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': False, 'context': 524288, 'images': True, 'draft': True}, '64000'),
             ({'model': 'original', 'uncensor': True, 'context': 524288, 'images': False, 'draft': True}, '64000'),
@@ -114,6 +114,24 @@ class SettingsTests(unittest.TestCase):
                     info = llm.profile()
                     self.assertEqual(tuple(info[key] for key in ('MOE_CACHE_MIB', 'UBATCH', 'DYN')), expected)
                     self.assertEqual((info['SLOTS'], info['DMA']), ('2', '0'))
+
+    def test_tuned_512k_preserves_one_slot_and_scopes_dynamic_cache(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith('LLM_')}
+        cases = [
+            ({}, ('73000', '512', '166')),
+            ({'model': 'abiray'}, ('64000', '512', '50')),
+            ({'uncensor': False}, ('64000', '512', '50')),
+            ({'images': False}, ('64000', '512', '50')),
+            ({'draft': False}, ('64000', '512', '50')),
+        ]
+        with mock.patch.dict(os.environ, env, clear=True):
+            for changes, expected in cases:
+                settings = dict(config.DEFAULTS, context=524288)
+                settings.update(changes)
+                with self.subTest(changes=changes), mock.patch.object(llm, 'SETTINGS', settings):
+                    info = llm.profile()
+                    self.assertEqual(tuple(info[key] for key in ('MOE_CACHE_MIB', 'UBATCH', 'DYN')), expected)
+                    self.assertEqual((info['CTX'], info['SLOTS'], info['DMA']), ('524288', '1', '0'))
 
     def test_first_request_uses_settings_applied_at_wake(self):
         handler = object.__new__(llm.Handler)
