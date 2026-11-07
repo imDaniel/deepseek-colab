@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-07",
+  "purpose": "Credential-free snapshot; runtime source remains authoritative.",
+  "scope": {
+    "model": "original",
+    "uncensor": true,
+    "images": true,
+    "draft": true
+  },
+  "settings": {
+    "idle_min": 10,
+    "max_hours": 6,
+    "model": "original",
+    "images": true,
+    "context": 524288,
+    "effort": "max",
+    "uncensor": true,
+    "draft": true,
+    "min_balance": 5
+  },
+  "limits": {
+    "max_output_tokens": 131072,
+    "max_inflight_including_queue": 4,
+    "draft_max": 2,
+    "experimental_output_enabled": false
+  },
+  "profiles": {
+    "262144": {
+      "context_per_request": 262144,
+      "experimental": false,
+      "boot": {
+        "CTX": "524288",
+        "SLOTS": "2",
+        "UBATCH": "1024",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "73000",
+        "DYN": "166",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original",
+        "REASONING_EFFORT": "max"
+      },
+      "output_policy": {
+        "context": 262144,
+        "configured_default_output_tokens": 65536,
+        "default_output_tokens": 65536,
+        "max_output_tokens": 131072,
+        "output_default_pending": false,
+        "input_budget_tokens": 196608,
+        "recommended_compact_at": 180000
+      }
+    },
+    "524288": {
+      "context_per_request": 524288,
+      "experimental": false,
+      "boot": {
+        "CTX": "524288",
+        "SLOTS": "1",
+        "UBATCH": "512",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "73000",
+        "DYN": "166",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original",
+        "REASONING_EFFORT": "max"
+      },
+      "output_policy": {
+        "context": 524288,
+        "configured_default_output_tokens": 131072,
+        "default_output_tokens": 131072,
+        "max_output_tokens": 131072,
+        "output_default_pending": false,
+        "input_budget_tokens": 393216,
+        "recommended_compact_at": 360000
+      }
+    },
+    "1048576": {
+      "context_per_request": 1048576,
+      "experimental": true,
+      "boot": {
+        "CTX": "1048576",
+        "SLOTS": "1",
+        "UBATCH": "512",
+        "MMPROJ": "1",
+        "MOE_CACHE_MIB": "68864",
+        "DYN": "80",
+        "DMA": "0",
+        "DRAFT": "1",
+        "UNCENSOR": "1",
+        "MODEL_VARIANT": "original",
+        "LLAMA_DSV41_IDX_CHUNK_MIB": "128",
+        "REASONING_EFFORT": "max"
+      },
+      "output_policy": {
+        "context": 1048576,
+        "configured_default_output_tokens": 262144,
+        "default_output_tokens": 131072,
+        "max_output_tokens": 131072,
+        "output_default_pending": true,
+        "input_budget_tokens": 917504,
+        "recommended_compact_at": 840000
+      }
+    }
+  },
+  "models": [
+    "deepseek-v4.1-flash-sec"
+  ]
+}

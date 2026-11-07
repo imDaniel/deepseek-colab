@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from integrations.magpie_colab import config  # noqa: E402
+from llm import output_policy  # noqa: E402
 
 STATE = Path(os.environ.get('LLM_STATE', '/var/lib/colab-deepseek/state'))
 DESIRED = STATE / 'magpie-settings.json'
@@ -138,6 +139,7 @@ class Handler(BaseHTTPRequestHandler):
             current = controller_status()
             active = config.read(ACTIVE, default=False) if current['state'] not in ('off', 'unavailable') else None
             return self.send(200, {'desired': desired, 'active_settings': active,
+                                   'output_profiles': {str(ctx): output_policy(ctx) for ctx in config.CHOICES['context']},
                                    'pending': active is not None and active != desired,
                                    'controller': current, 'balance': balance_snapshot()})
         except (OSError, ValueError, json.JSONDecodeError):

@@ -17,9 +17,24 @@ from integrations.magpie_colab import config
 
 
 class RequestLimits(unittest.TestCase):
+    def test_tier_defaults_and_pending_million_output_are_separate_from_public_cap(self):
+        for context, target, default in ((262144, 65536, 65536), (524288, 131072, 131072),
+                                          (1048576, 262144, 131072)):
+            policy = llm.output_policy(context)
+            self.assertEqual(policy['configured_default_output_tokens'], target)
+            self.assertEqual(policy['default_output_tokens'], default)
+            self.assertEqual(policy['max_output_tokens'], 131072)
+            self.assertEqual(policy['output_default_pending'], target > default)
+            self.assertEqual(policy['input_budget_tokens'] + default, context)
+            for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
+                self.assertEqual(json.loads(llm.with_output_limit(b'{}', path, policy))[field], default)
+                with self.assertRaises(ValueError):
+                    llm.with_output_limit(json.dumps({field: 262144}).encode(), path, policy)
+        self.assertEqual(llm.output_policy(131072)['default_output_tokens'], 32768)
+
     def test_output_defaults_and_explicit_smaller_budgets(self):
         for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
-            self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 32768)
+            self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 131072)
             self.assertEqual(json.loads(llm.with_output_limit(json.dumps({field: 1024}).encode(), path))[field], 1024)
         value = json.loads(llm.with_output_limit(b'{"max_completion_tokens":8192}', '/v1/chat/completions'))
         self.assertEqual(value, {'max_tokens': 8192})
@@ -53,8 +68,8 @@ class RequestLimits(unittest.TestCase):
             self.assertEqual(body['messages'][0]['content'], 'hello')
 
     def test_invalid_budget_does_not_enter_or_wake(self):
-        for payload in ({'max_tokens': 65536}, {'max_tokens': 0}, {'max_tokens': True}, {'max_tokens': 1.5},
-                        {'max_tokens': None}, {'max_tokens': 5, 'max_completion_tokens': 5}, {'n_predict': 65536}, []):
+        for payload in ({'max_tokens': 262144}, {'max_tokens': 0}, {'max_tokens': True}, {'max_tokens': 1.5},
+                        {'max_tokens': None}, {'max_tokens': 5, 'max_completion_tokens': 5}, {'n_predict': 262144}, []):
             h = object.__new__(llm.Handler)
             h.server = mock.Mock(mgr=llm.Manager())
             h.path, h.command = '/v1/chat/completions', 'POST'

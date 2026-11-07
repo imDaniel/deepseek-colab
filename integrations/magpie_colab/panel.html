@@ -38,7 +38,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
  <label>空闲停机<select id="idle_min"><option value="2">2 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select><p class="hint">API 无活动后的本地停机阈值；Colab 可提前结束会话。</p></label>
  <label>最长连续运行<select id="max_hours"><option value="1">1 小时</option><option value="2">2 小时</option><option value="6">6 小时</option><option value="12">12 小时</option><option value="24">24 小时</option></select><p class="hint">本地强制停机上限，不延长 Colab 允许的运行时间。24 小时须符合 Colab 套餐条件，且不保证可用。</p></label>
  <label>每次请求上下文<select id="context"><option value="262144">262,144 token（256K）</option><option value="524288" selected>524,288 token（512K，默认）</option><option value="1048576">1,048,576 token（1M，实验档）</option></select><p class="hint">最多接收 4 个在途请求；256K 档使用两个解码槽，512K / 1M 档使用一个，其余请求排队。1M 首次处理百万输入约需 11–12 分钟，连续对话可复用前缀缓存。</p></label>
- <div><label>每次请求最大输出</label><p>32,768 token</p><p class="hint">包含思考与正文，与输入共享总上下文窗口。API 可请求更少的输出；达到上限可能截断回答。建议客户端分别在 220,000 / 460,000 / 950,000 token 左右压缩历史。</p></div>
+ <div><label>每次请求输出预算</label><p id="output-value">正在读取…</p><p class="hint" id="output-hint"></p></div>
  <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
  <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
  <div><label class="check"><input id="images" type="checkbox">启用图像输入</label><label class="check"><input id="draft" type="checkbox">启用 DSpark 草稿模型</label><p class="hint">Abiray 已包含修改，不会重复应用补丁。</p></div>
@@ -48,10 +48,12 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
 <script>
 (() => {
  const $ = id => document.getElementById(id), fields=['idle_min','max_hours','context','effort','min_balance','images','draft'];
- let dirty=false, logsBusy=false;
+ let dirty=false, logsBusy=false, policies={};
+ function paintOutput(){const p=policies[$('context').value];if(!p)return;$('output-value').textContent=fmt(p.default_output_tokens)+' token（当前默认），对外上限 '+fmt(p.max_output_tokens);$('output-hint').textContent=(p.output_default_pending?'本档目标默认 '+fmt(p.configured_default_output_tokens)+'，256K 输出尚未开放；当前暂用 128K。':'')+'包含思考、正文与工具调用。默认输入预算 '+fmt(p.input_budget_tokens)+'，建议约 '+fmt(p.recommended_compact_at)+' token 压缩历史。输入与输出共享总窗口。';}
  const fmt = n => n == null ? '—' : Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2});
  const duration = s => {if(s == null)return '—';s=Math.max(0,Math.round(s));return Math.floor(s/3600)+'小时 '+Math.floor(s%3600/60)+'分 '+s%60+'秒'};
  function paint(d){
+   policies=d.output_profiles||policies;
    const c=d.controller||{}, b=d.balance||{}, state=String(c.state||'unavailable');
    $('status').textContent=state==='off'?'未运行':state==='starting'?'启动中':state.startsWith('ready')?'运行中':state==='stopping'?'停止中':'不可用';
    $('stage').textContent=c.stage|| (c.has_error?'请检查控制器日志':'');
@@ -61,6 +63,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
    $('active').textContent=c.inflight?String(c.inflight)+' / '+String(c.max_inflight||4)+' 个在途请求，'+String(c.decode_slots||'—')+' 个解码槽':state.startsWith('ready')?'没有活动请求':'按请求自动启动';
    $('pending').hidden=!d.pending;
    if(!dirty&&d.desired){for(const k of fields){const el=$(k);if(el.type==='checkbox')el.checked=!!d.desired[k];else el.value=String(d.desired[k]);}$('model').value=d.desired.model==='abiray'?'abiray':d.desired.uncensor?'original_uncensored':'original_base';}
+   paintOutput();
  }
  async function refresh(){try{const r=await fetch('./api/status',{cache:'no-store'});if(!r.ok)throw new Error('状态读取失败');paint(await r.json());}catch(e){$('status').textContent='不可用';$('stage').textContent=e.message;}}
  async function refreshLogs(){
@@ -72,7 +75,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
    $('logs-note').textContent=(d.truncated?'显示最近 300 行或 64 KiB。':'显示控制器启动、运行和停机日志。')+' 最近更新 '+new Date().toLocaleTimeString();
   }catch(e){$('logs-note').textContent='日志刷新失败：'+e.message;}finally{logsBusy=false;}
  }
- $('form').addEventListener('input',()=>dirty=true);
+ $('form').addEventListener('input',()=>{dirty=true;paintOutput();});
  $('save').addEventListener('click',async ()=>{const v={};for(const k of fields){const el=$(k);v[k]=el.type==='checkbox'?el.checked:['idle_min','max_hours','context','min_balance'].includes(k)?Number(el.value):el.value;}v.model=$('model').value==='abiray'?'abiray':'original';v.uncensor=$('model').value!=='original_base';
   $('save').disabled=true;$('notice').className='notice';$('notice').textContent='保存中…';
   try{const r=await fetch('./api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');dirty=false;$('notice').textContent='已保存，将在下次启动时生效。';await refresh();}catch(e){$('notice').className='notice error';$('notice').textContent=e.message;}finally{$('save').disabled=false;}

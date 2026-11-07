@@ -170,6 +170,14 @@ def install():
     llm.Manager._run_start = run_start
     llm.Handler.held = retry_held
 
+    def request_output_policy(handler):
+        manager = handler.server.mgr
+        with manager.cond:
+            context = config.read_desired(DESIRED)['context'] if manager.state == 'off' else llm.choice()[1]
+            return llm.output_policy(context)
+
+    llm.Handler.output_policy = request_output_policy
+
     original_models = llm.Handler.models
 
     def models(handler):

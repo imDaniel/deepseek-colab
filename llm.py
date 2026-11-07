@@ -57,8 +57,9 @@ MIN_BALANCE = float(os.environ.get('LLM_MIN_BALANCE', '5'))
 TUNNEL_PORT = int(os.environ.get('LLM_TUNNEL_PORT', '0'))
 POLL_S = float(os.environ.get('LLM_POLL_S', '15'))
 HEALTH_S = min(1.0, POLL_S)
-BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 3600
-MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 32768
+BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 7200
+MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 131072
+OUTPUT_DEFAULTS = {262144: 65536, 524288: 131072, 1048576: 262144}
 MODEL_ID = 'deepseek-v4.1-flash-sec'
 REASONING_LEVELS = ('low', 'high', 'max')
 COLAB_CLI = 'google-colab-cli==0.7.5'
@@ -1212,7 +1213,20 @@ def error_obj(code, msg, kind='unavailable_error'):
     return {'error': {'code': code, 'message': msg, 'type': kind}}
 
 
-def with_output_limit(body, path):
+def output_policy(context=None):
+    """Separate configured tier defaults from the current public rollout ceiling."""
+    context = choice()[1] if context is None else int(context)
+    target = OUTPUT_DEFAULTS.get(context, min(32768, context // 2))
+    ceiling = min(MAX_OUTPUT_TOKENS, context // 2)
+    default = min(target, ceiling)
+    input_budget = context - default
+    return {'context': context, 'configured_default_output_tokens': target,
+            'default_output_tokens': default, 'max_output_tokens': ceiling,
+            'output_default_pending': target > ceiling, 'input_budget_tokens': input_budget,
+            'recommended_compact_at': max(1, input_budget * 92 // 100 // 10000 * 10000)}
+
+
+def with_output_limit(body, path, policy=None):
     """Validate a bounded generation budget before acquiring the GPU."""
     if path not in ('/v1/chat/completions', '/v1/completions', '/v1/responses'):
         return body
@@ -1226,9 +1240,11 @@ def with_output_limit(body, path):
     if len(present) > 1:
         raise ValueError('use only one output-token limit')
     key = present[0] if present else fields[0]
-    value = req.get(key, MAX_OUTPUT_TOKENS)
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_OUTPUT_TOKENS:
-        raise ValueError('%s must be an integer from 1 to %d' % (key, MAX_OUTPUT_TOKENS))
+    policy = policy or output_policy()
+    ceiling = policy['max_output_tokens']
+    value = req.get(key, policy['default_output_tokens'])
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= ceiling:
+        raise ValueError('%s must be an integer from 1 to %d; 256K output is not enabled on the public API' % (key, ceiling))
     if key != fields[0]:
         del req[key]
     req[fields[0]] = value
@@ -1326,13 +1342,21 @@ class Handler(BaseHTTPRequestHandler):
         name = host.split(']')[0] + ']' if host.startswith('[') else host.rsplit(':', 1)[0]
         return not LOOPBACK or name in ('', '127.0.0.1', 'localhost', '[::1]')
 
+    def output_policy(self):
+        return output_policy()
+
     def models(self):
         info = profile()
+        limits = self.output_policy()
         return {'object': 'list', 'data': [{'id': m, 'object': 'model', 'owned_by': 'llm.py', 'created': 0, 'reasoning_effort': e,
                                             'reasoning': True, 'reasoning_levels': list(REASONING_LEVELS),
                                             'supported_reasoning_levels': [{'effort': level} for level in REASONING_LEVELS],
                                             'context_length': int(info['CTX']) // int(info['SLOTS']),
-                                            'max_output_tokens': MAX_OUTPUT_TOKENS, 'image_input': info['MMPROJ'] == '1',
+                                            'max_output_tokens': limits['max_output_tokens'],
+                                            'default_output_tokens': limits['default_output_tokens'],
+                                            'configured_default_output_tokens': limits['configured_default_output_tokens'],
+                                            'output_default_pending': limits['output_default_pending'],
+                                            'image_input': info['MMPROJ'] == '1',
                                             'modalities': {'input': ['text', 'image'] if info['MMPROJ'] == '1' else ['text'],
                                                            'output': ['text']}} for m, e in model_efforts()]}
 
@@ -1349,7 +1373,7 @@ class Handler(BaseHTTPRequestHandler):
         if body is not None and path.startswith('/v1/'):
             if self.authed():
                 try:
-                    body = with_output_limit(body, path)
+                    body = with_output_limit(body, path, self.output_policy())
                 except (ValueError, UnicodeDecodeError) as exc:
                     return self.fail(400, str(exc), obj=error_obj(400, str(exc), 'invalid_request_error'))
                 if not mgr.admit():
@@ -1840,11 +1864,11 @@ def write_opencode(port=PORT):
     image = {'attachment': True, 'modalities': {'input': ['text', 'image'], 'output': ['text']}} if info['MMPROJ'] == '1' else {}
     models = {m: dict({'name': 'DeepSeek-V4.1-Flash uncensored, reasoning effort %s' % e, 'tool_call': True, 'reasoning': True,
                        'interleaved': {'field': 'reasoning_content'}, 'options': {'reasoningEffort': e},
-                       'limit': {'context': int(info['CTX']) // int(info['SLOTS']), 'output': 32768}}, **image) for m, e in model_efforts()}
+                       'limit': {'context': int(info['CTX']) // int(info['SLOTS']), 'output': output_policy()['default_output_tokens']}}, **image) for m, e in model_efforts()}
     cfg = {'$schema': 'https://opencode.ai/config.json',
            'provider': {'ds41': {'npm': '@ai-sdk/openai-compatible', 'name': 'DeepSeek-V4.1-Flash on Colab',
                                  'options': {'baseURL': 'http://%s:%d/v1' % (HOST, port), 'apiKey': '{file:%s}' % KEY_FILE.replace('\\', '/'),
-                                             'headerTimeout': 1800000, 'chunkTimeout': 900000},
+                                             'headerTimeout': 7200000, 'chunkTimeout': 1800000},
                                  'models': models}},
            'model': 'ds41/' + MODEL_ID, 'small_model': 'ds41/' + MODEL_ID}
     with open(os.path.join(STATE, 'opencode.json'), 'w') as f:

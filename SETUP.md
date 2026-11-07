@@ -191,3 +191,7 @@ Tests (Linux, offline, about 80 s): `python3 -B -m unittest -v tests/test_llm.py
 ## Uninstall
 
 `python3 llm.py down`, then delete the folder. To remove the Colab CLI too: `uv tool uninstall google-colab-cli` and delete `~/.config/colab-cli/`.
+
+## Output budgets (2026-11-07)
+
+The 256K context defaults to 65,536 generated tokens; the default 512K context uses 131,072. The configured 1M default is 262,144, pending validation and explicit later release; effective output remains 131,072. Controller requests above 131,072 fail before Colab wakes; both relay catalogs advertise that ceiling. The shared budget includes thinking, visible text and tool calls, and input plus generated tokens must fit the selected context. Update explicit client budgets as well as both relay catalogs. See the [current configuration](configs/colab-optimized-20261107.json) and [integration guide](integrations/magpie_colab/README.md).

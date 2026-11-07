@@ -551,7 +551,7 @@ class UnitTests(unittest.TestCase):
         self.assertTrue(os.path.exists(L.SSH_KEY))
         cfg = json.loads(read(os.path.join(L.STATE, 'opencode.json')))['provider']['ds41']
         self.assertEqual(cfg['options']['baseURL'], 'http://127.0.0.1:18080/v1')
-        self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (1800000, 900000))
+        self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (7200000, 1800000))
         self.assertEqual(list(cfg['models']), ['deepseek-v4.1-flash-sec'])
         self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['limit']['context'], 524288)
         self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['modalities']['input'], ['text', 'image'])

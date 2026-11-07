@@ -227,6 +227,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'output_policy', llm.Handler.output_policy), \
                 mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
                 mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True) as begin:
@@ -255,6 +256,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'output_policy', llm.Handler.output_policy), \
                 mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
                 mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
@@ -275,6 +277,7 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'output_policy', llm.Handler.output_policy), \
                 mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
                 mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
@@ -284,6 +287,7 @@ class SettingsTests(unittest.TestCase):
             handler = object.__new__(llm.Handler)
             handler.server = mock.Mock(mgr=manager)
             self.assertEqual(handler.models()['data'][0]['context_length'], 524288)
+            self.assertEqual(handler.output_policy()['default_output_tokens'], 131072)
             manager.state = 'ready'
             config.write(controller.DESIRED, dict(config.DEFAULTS, context=262144, images=False))
             active = handler.models()['data'][0]
@@ -292,9 +296,12 @@ class SettingsTests(unittest.TestCase):
             manager.state = 'off'
             desired = handler.models()['data'][0]
             self.assertEqual(desired['context_length'], 262144)
+            self.assertEqual(desired['default_output_tokens'], 65536)
             self.assertEqual(desired['modalities']['input'], ['text'])
             config.write(controller.DESIRED, dict(config.DEFAULTS, context=1048576))
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
+            self.assertEqual(handler.output_policy()['configured_default_output_tokens'], 262144)
+            self.assertEqual(handler.output_policy()['default_output_tokens'], 131072)
             self.assertEqual(config.read_desired(controller.DESIRED)['context'], 1048576)
 
 
