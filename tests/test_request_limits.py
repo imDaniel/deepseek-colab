@@ -48,7 +48,7 @@ class RequestLimits(unittest.TestCase):
                     mock.patch('sys.stdout', new_callable=io.StringIO):
                 llm.cmd_ask(['hello'] + extra)
             body = json.loads(call.call_args.args[3])
-            self.assertEqual(body['model'], 'ds41')
+            self.assertEqual(body['model'], 'deepseek-v4.1-flash-sec')
             self.assertEqual(body.get('reasoning_effort'), 'max' if extra else None)
             self.assertEqual(body['messages'][0]['content'], 'hello')
 

@@ -155,7 +155,7 @@ class Case:
         if auth:
             headers['Authorization'] = 'Bearer ' + self.key
         if method == 'POST' and body is None:
-            body = {'model': 'ds41', 'messages': [{'role': 'user', 'content': 'Hello World!'}], 'stream': stream}
+            body = {'model': 'deepseek-v4.1-flash-sec', 'messages': [{'role': 'user', 'content': 'Hello World!'}], 'stream': stream}
         t0 = time.time()
         conn.request(method, path, body=json.dumps(body).encode() if body is not None else None, headers=headers)
         r = conn.getresponse()
@@ -284,14 +284,14 @@ class ProxyTests(unittest.TestCase):
         r = c.req(method='GET', path='/v1/models')
         self.assertEqual(r.status, 200)
         data = json.loads(r.raw)['data']
-        self.assertEqual([m['id'] for m in data], ['ds41'])
+        self.assertEqual([m['id'] for m in data], ['deepseek-v4.1-flash-sec'])
         self.assertEqual((data[0]['context_length'], data[0]['image_input']), (524288, True))
         self.assertEqual(c.req(method='GET', path='/v1/models', auth=False).status, 401)
         self.assertEqual(c.req(host='evil.example:%d' % c.port).status, 403)
         self.assertEqual(c.calls('new'), [])
         msgs = [{'role': 'user', 'content': 'hi'}]
         efforts = [json.loads(c.req(body={'model': m, 'messages': msgs, **x}).raw)['effort']
-                   for m, x in (('ds41', {}), ('ds41', {'reasoning_effort': 'max'}), ('ds41', {'reasoning_effort': 'low'}))]
+                   for m, x in (('deepseek-v4.1-flash-sec', {}), ('deepseek-v4.1-flash-sec', {'reasoning_effort': 'max'}), ('deepseek-v4.1-flash-sec', {'reasoning_effort': 'low'}))]
         self.assertEqual(efforts, ['max', 'max', 'low'])
 
     def test_03_boot_failure(self):
@@ -403,7 +403,7 @@ class ProxyTests(unittest.TestCase):
         r = c.llm('opencode', '/some/project')
         self.assertEqual(r.stdout.strip(), 'config=%s args=/some/project' % os.path.join(c.state, 'opencode.json'))
         cfg = json.loads(read(os.path.join(c.state, 'opencode.json')))['provider']['ds41']
-        self.assertEqual((cfg['options']['baseURL'], cfg['models']['ds41']['limit']['context']), ('http://127.0.0.1:%d/v1' % c.port, 131072))
+        self.assertEqual((cfg['options']['baseURL'], cfg['models']['deepseek-v4.1-flash-sec']['limit']['context']), ('http://127.0.0.1:%d/v1' % c.port, 131072))
         self.assertEqual(c.llm('down').returncode, 0)
         c.wait(lambda: not procs_with(c.dir, '--detached'), 10)
         c.assert_all_stopped(self)
@@ -415,13 +415,13 @@ class ProxyTests(unittest.TestCase):
             json.dump({'images': False, 'context': 131072, 'effort': 'high', 'idle_min': 7, 'max_hours': 2, 'uncensor': False}, f)
         r = c.llm('up')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn('ds41 (effort high)', r.stdout)
+        self.assertIn('deepseek-v4.1-flash-sec (effort high)', r.stdout)
         self.assertIn('stops after 7 minutes without requests', r.stdout)
         env = json.loads(read(c.res('boot_check.json')))['env']
         self.assertEqual((env['CTX'], env['UNCENSOR']), ('262144', '0'))
         self.assertEqual(env['REASONING_EFFORT'], 'high')
         msgs = [{'role': 'user', 'content': 'hi'}]
-        self.assertEqual([json.loads(c.req(body={'model': 'ds41', 'messages': msgs, **extra}).raw)['effort']
+        self.assertEqual([json.loads(c.req(body={'model': 'deepseek-v4.1-flash-sec', 'messages': msgs, **extra}).raw)['effort']
                           for extra in ({}, {'reasoning_effort': 'max'})], ['high', 'max'])
         self.assertIn('hard stop 2 h', c.llm('settings').stderr)
         self.assertEqual(c.llm('down').returncode, 0)
@@ -552,9 +552,9 @@ class UnitTests(unittest.TestCase):
         cfg = json.loads(read(os.path.join(L.STATE, 'opencode.json')))['provider']['ds41']
         self.assertEqual(cfg['options']['baseURL'], 'http://127.0.0.1:18080/v1')
         self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (1800000, 900000))
-        self.assertEqual(list(cfg['models']), ['ds41'])
-        self.assertEqual(cfg['models']['ds41']['limit']['context'], 524288)
-        self.assertEqual(cfg['models']['ds41']['modalities']['input'], ['text', 'image'])
+        self.assertEqual(list(cfg['models']), ['deepseek-v4.1-flash-sec'])
+        self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['limit']['context'], 524288)
+        self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['modalities']['input'], ['text', 'image'])
 
     def test_vm_files_in_sync(self):
         self.assertEqual(self.llm.missing_vm_files(), [])

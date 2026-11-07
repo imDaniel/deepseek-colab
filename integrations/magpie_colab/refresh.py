@@ -8,11 +8,32 @@ import json
 import os
 import subprocess
 import time
-from urllib.request import urlopen
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 PANEL = os.environ.get('COLAB_PANEL_URL', 'http://127.0.0.1:18082/api/status')
 MAGPIE = os.environ.get('MAGPIE_BIN', '/var/lib/magpie/bin/magpie')
 PROVIDER = os.environ.get('COLAB_MAGPIE_PROVIDER', 'colab-ds41')
+
+
+def refresh_models():
+    key = os.environ.get('MAGPIE_WEB_KEY')
+    if key:
+        base = os.environ.get('COLAB_MAGPIE_WEB_URL', 'http://127.0.0.1:3430').rstrip('/')
+        url = urlsplit(base)
+        if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost', '::1') or url.username or url.password or url.path or url.query or url.fragment:
+            raise ValueError('COLAB_MAGPIE_WEB_URL must be a loopback HTTP origin')
+        request = Request(base + '/api/provider/models', data=json.dumps({'id': PROVIDER}).encode(),
+                          headers={'Cookie': 'magpie_web_%d=%s' % (url.port or 80, key), 'Content-Type': 'application/json'})
+        with urlopen(request, timeout=45) as response:
+            response.read()
+            return response.status == 200
+    # Standalone CLI processes do not invalidate a running gateway's in-memory
+    # catalog. Keep this fallback for installations without the management key.
+    p = subprocess.run([MAGPIE, 'provider', 'refresh', PROVIDER],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       stdin=subprocess.DEVNULL, timeout=45)
+    return p.returncode == 0
 
 
 def effective(status):
@@ -35,10 +56,7 @@ def main():
             with urlopen(PANEL, timeout=5) as response:
                 settings = effective(json.load(response))
             if settings is not None and signature(settings) != last:
-                p = subprocess.run([MAGPIE, 'provider', 'refresh', PROVIDER],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   stdin=subprocess.DEVNULL, timeout=45)
-                if p.returncode == 0:
+                if refresh_models():
                     last = signature(settings)
                     print('Magpie model capabilities refreshed', flush=True)
                 else:

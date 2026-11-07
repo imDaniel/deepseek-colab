@@ -82,6 +82,6 @@
     }
   },
   "models": [
-    "ds41"
+    "deepseek-v4.1-flash-sec"
   ]
 }

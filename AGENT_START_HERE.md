@@ -52,7 +52,7 @@ The credential-free [saved configuration](configs/colab-optimized-20261106.json)
 4. Hand over the printed base URL and key, and configure their app:
    - opencode: `python3 llm.py opencode [project folder]`, or merge the `provider` block of `state/opencode.json` into their config.
    - OpenAI SDK, curl or any "OpenAI-compatible" provider: base URL `http://127.0.0.1:18080/v1`, key from `state/api_key`.
-   - The only model is `ds41`, exposed in Magpie as `colab-ds41/ds41`. Its default effort is max; saved settings or an explicit request's `reasoning_effort` can override it.
+   - The only model is `deepseek-v4.1-flash-sec`, exposed in Magpie as `colab-ds41/deepseek-v4.1-flash-sec`. Its default effort is max; saved settings or an explicit request's `reasoning_effort` can override it.
 5. Check it with `python3 llm.py ask "Hello!"`. Tell them: the GPU stops after 10 idle minutes and restarts on the next request (about 4 minutes); `down` stops it now.
 
 ## When something fails

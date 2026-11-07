@@ -59,6 +59,8 @@ POLL_S = float(os.environ.get('LLM_POLL_S', '15'))
 HEALTH_S = min(1.0, POLL_S)
 BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 3600
 MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 32768
+MODEL_ID = 'deepseek-v4.1-flash-sec'
+REASONING_LEVELS = ('low', 'high', 'max')
 COLAB_CLI = 'google-colab-cli==0.7.5'
 # Estimate from the current G4 account rate; Colab may change its rates.
 G4_CU_PER_HOUR = 10.05
@@ -250,7 +252,7 @@ def describe(images, context):
 
 
 def model_efforts():
-    return (('ds41', str(SETTINGS['effort'])),)
+    return ((MODEL_ID, str(SETTINGS['effort'])),)
 
 
 def model_variant():
@@ -1192,7 +1194,7 @@ class Manager:
 
 
 def with_effort(body):
-    """Apply ds41's configured default unless the client supplies its own effort."""
+    """Apply the configured default unless the client supplies its own effort."""
     try:
         req = json.loads(body)
     except ValueError:
@@ -1217,8 +1219,8 @@ def with_output_limit(body, path):
     req = json.loads(body)
     if not isinstance(req, dict):
         raise ValueError('request body must be a JSON object')
-    if req.get('model') not in (None, 'ds41'):
-        raise ValueError('unknown model; use ds41')
+    if req.get('model') not in (None, MODEL_ID):
+        raise ValueError('unknown model; use ' + MODEL_ID)
     fields = ('max_output_tokens',) if path == '/v1/responses' else ('max_tokens', 'max_completion_tokens', 'n_predict')
     present = [key for key in fields if key in req]
     if len(present) > 1:
@@ -1249,11 +1251,13 @@ class Handler(BaseHTTPRequestHandler):
     def chunk(self, data):
         self.wfile.write(b'%x\r\n%s\r\n' % (len(data), data))
 
-    def send_json(self, code, obj):
+    def send_json(self, code, obj, headers=None):
         data = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(data)))
+        for key, value in (headers or {}).items():
+            self.send_header(key, str(value))
         self.end_headers()
         self.wfile.write(data)
 
@@ -1325,6 +1329,8 @@ class Handler(BaseHTTPRequestHandler):
     def models(self):
         info = profile()
         return {'object': 'list', 'data': [{'id': m, 'object': 'model', 'owned_by': 'llm.py', 'created': 0, 'reasoning_effort': e,
+                                            'reasoning': True, 'reasoning_levels': list(REASONING_LEVELS),
+                                            'supported_reasoning_levels': [{'effort': level} for level in REASONING_LEVELS],
                                             'context_length': int(info['CTX']) // int(info['SLOTS']),
                                             'max_output_tokens': MAX_OUTPUT_TOKENS, 'image_input': info['MMPROJ'] == '1',
                                             'modalities': {'input': ['text', 'image'] if info['MMPROJ'] == '1' else ['text'],
@@ -1680,7 +1686,7 @@ def choose_settings(force=False):
     new['images'] = pick('Images', 'image input, y or n', 'y' if old['images'] else 'n', yes_no)
     new['context'] = pick('Context', '32K, 64K, 131K, 262K, 512K or 1M', short_context(context_value(old['context']) or DEFAULTS['context']), context_value)
     print('  %s%s' % (' ' * 12, paint(speed_note(new['images'], new['context']), 'dim')))
-    new['effort'] = pick('Effort', 'ds41: 1-100, low, high, max', old['effort'], effort_value)
+    new['effort'] = pick('Effort', MODEL_ID + ': 1-100, low, high, max', old['effort'], effort_value)
     new['idle_min'] = pick('Idle stop', 'minutes, 1-120', old['idle_min'], lambda t: number(t, 1, 120))
     new['max_hours'] = pick('Hard stop', 'hours, 1-24', old['max_hours'], lambda t: number(t, 1, 24))
     new['model'] = pick('Model', 'original or abiray', old['model'], lambda t: t if t in ('original', 'abiray') else None)
@@ -1840,7 +1846,7 @@ def write_opencode(port=PORT):
                                  'options': {'baseURL': 'http://%s:%d/v1' % (HOST, port), 'apiKey': '{file:%s}' % KEY_FILE.replace('\\', '/'),
                                              'headerTimeout': 1800000, 'chunkTimeout': 900000},
                                  'models': models}},
-           'model': 'ds41/ds41', 'small_model': 'ds41/ds41'}
+           'model': 'ds41/' + MODEL_ID, 'small_model': 'ds41/' + MODEL_ID}
     with open(os.path.join(STATE, 'opencode.json'), 'w') as f:
         json.dump(cfg, f, indent=2)
 
@@ -1848,7 +1854,7 @@ def write_opencode(port=PORT):
 def endpoint_info(port, bal=None):
     info, me_cmd = profile(), cli()
     rows = (('Base URL', 'http://%s:%d/v1' % (HOST, port)), ('API key', api_key()),
-            ('Models', 'ds41 (effort %s)' % SETTINGS['effort']),
+            ('Models', '%s (effort %s)' % (MODEL_ID, SETTINGS['effort'])),
             ('Context', '%s tokens per request · image input %s · %s' % (
                 '{:,}'.format(int(info['CTX']) // int(info['SLOTS'])), 'on' if info['MMPROJ'] == '1' else 'off', speed_note(*choice()))))
     print()
@@ -2001,7 +2007,7 @@ def cmd_ask(words):
     held = serve_running()
     if not held:
         sys.exit('The endpoint is not running. Start it first: %s up' % cli())
-    model = 'ds41'
+    model = MODEL_ID
     body = {'model': model, 'stream': True, 'messages': [{'role': 'user', 'content': ' '.join(w for w in words if w != '--max') or 'Hello!'}]}
     if '--max' in words:
         body['reasoning_effort'] = 'max'

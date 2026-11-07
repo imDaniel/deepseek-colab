@@ -18,6 +18,21 @@ with mock.patch.dict(sys.modules, {'llm': llm}):
 
 
 class SettingsTests(unittest.TestCase):
+    def test_refresh_updates_running_gateway_catalog_and_keeps_key_on_loopback(self):
+        with mock.patch.dict(os.environ, {'MAGPIE_WEB_KEY': 'fixture-key', 'COLAB_MAGPIE_WEB_URL': 'http://127.0.0.1:3430'}, clear=True), \
+                mock.patch.object(refresh, 'urlopen') as fetch, mock.patch.object(refresh.subprocess, 'run') as cli:
+            fetch.return_value.__enter__.return_value.status = 200
+            self.assertTrue(refresh.refresh_models())
+            request = fetch.call_args.args[0]
+            self.assertEqual(request.full_url, 'http://127.0.0.1:3430/api/provider/models')
+            self.assertEqual(json.loads(request.data), {'id': refresh.PROVIDER})
+            self.assertEqual(request.get_header('Cookie'), 'magpie_web_3430=fixture-key')
+            cli.assert_not_called()
+            os.environ['COLAB_MAGPIE_WEB_URL'] = 'https://example.com'
+            fetch.reset_mock()
+            with self.assertRaises(ValueError): refresh.refresh_models()
+            fetch.assert_not_called()
+
     def test_dead_backend_is_stopped_only_after_repeated_idle_failures(self):
         mgr = llm.Manager()
         mgr.state, mgr.tunnel_ok, mgr.port, mgr.attempt = 'ready', True, 12345, 1
@@ -171,7 +186,7 @@ class SettingsTests(unittest.TestCase):
         handler.held = on_acquire
         with mock.patch.object(llm, 'SETTINGS', dict(llm.SETTINGS, effort='low')), \
                 mock.patch.object(llm, 'http_call', side_effect=capture):
-            handler.route(json.dumps({'model': 'ds41', 'messages': []}).encode())
+            handler.route(json.dumps({'model': 'deepseek-v4.1-flash-sec', 'messages': []}).encode())
         self.assertEqual(forwarded[0]['reasoning_effort'], 'high')
 
     def test_invalid_values_are_rejected_before_writing(self):
@@ -212,6 +227,8 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
+                mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True) as begin:
             config.write(controller.DESIRED, dict(config.DEFAULTS, model='abiray'))
             controller.install()
@@ -238,6 +255,8 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
+                mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
             config.write(controller.ACTIVE, dict(config.DEFAULTS, model='abiray', idle_min=2))
             config.write(controller.DESIRED, dict(config.DEFAULTS, model='original', idle_min=30))
@@ -256,6 +275,8 @@ class SettingsTests(unittest.TestCase):
                 mock.patch.object(llm, 'IDLE_MIN'), mock.patch.object(llm, 'MAX_HOURS'), \
                 mock.patch.object(llm, 'MIN_BALANCE'), mock.patch.object(llm, 'boot_vars', llm.boot_vars), \
                 mock.patch.object(llm.Handler, 'models', llm.Handler.models), \
+                mock.patch.object(llm.Handler, 'held', llm.Handler.held), \
+                mock.patch.object(llm.Manager, '_run_start', llm.Manager._run_start), \
                 mock.patch.object(llm.Manager, '_begin', autospec=True):
             config.write(controller.DESIRED, dict(config.DEFAULTS, context=524288))
             controller.install()
