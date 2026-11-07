@@ -39,7 +39,7 @@ Starting a Colab G4 GPU · about 4 minutes
 
   Base URL   http://127.0.0.1:18080/v1
   API key    sk-ds41-3f9c...
-  Models     ds41 (effort 50) · ds41-max (effort max)
+  Models     ds41 (effort max)
   Context    524,288 tokens per request · image input on · one decoder slot
 
   Try it     python3 llm.py ask "Hello!"

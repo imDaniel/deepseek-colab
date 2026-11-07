@@ -263,6 +263,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(check['crlf'], [])
         self.assertEqual((check['secrets'], check['secret_modes']), (['key'], ['0o600']))
         self.assertEqual((check['env']['CTX'], check['env']['MMPROJ']), ('524288', '1'))
+        self.assertEqual(check['env']['REASONING_EFFORT'], 'max')
         r2 = c.req()
         self.assertEqual((r2.status, r2.content()), (200, 'ok'))
         self.assertLess(r2.t_headers, 2.0)
@@ -283,15 +284,15 @@ class ProxyTests(unittest.TestCase):
         r = c.req(method='GET', path='/v1/models')
         self.assertEqual(r.status, 200)
         data = json.loads(r.raw)['data']
-        self.assertEqual([m['id'] for m in data], ['ds41', 'ds41-max'])
+        self.assertEqual([m['id'] for m in data], ['ds41'])
         self.assertEqual((data[0]['context_length'], data[0]['image_input']), (524288, True))
         self.assertEqual(c.req(method='GET', path='/v1/models', auth=False).status, 401)
         self.assertEqual(c.req(host='evil.example:%d' % c.port).status, 403)
         self.assertEqual(c.calls('new'), [])
         msgs = [{'role': 'user', 'content': 'hi'}]
         efforts = [json.loads(c.req(body={'model': m, 'messages': msgs, **x}).raw)['effort']
-                   for m, x in (('ds41-max', {}), ('ds41', {}), ('ds41-max', {'reasoning_effort': 'low'}))]
-        self.assertEqual(efforts, ['max', None, 'low'])
+                   for m, x in (('ds41', {}), ('ds41', {'reasoning_effort': 'max'}), ('ds41', {'reasoning_effort': 'low'}))]
+        self.assertEqual(efforts, ['max', 'max', 'low'])
 
     def test_03_boot_failure(self):
         c = Case(self, LLM_BOOT_ENV='FAKE_MODE=fail X_EXTRA=1', FAKE_BOOT_S='1')
@@ -418,8 +419,10 @@ class ProxyTests(unittest.TestCase):
         self.assertIn('stops after 7 minutes without requests', r.stdout)
         env = json.loads(read(c.res('boot_check.json')))['env']
         self.assertEqual((env['CTX'], env['UNCENSOR']), ('262144', '0'))
+        self.assertEqual(env['REASONING_EFFORT'], 'high')
         msgs = [{'role': 'user', 'content': 'hi'}]
-        self.assertEqual([json.loads(c.req(body={'model': m, 'messages': msgs}).raw)['effort'] for m in ('ds41', 'ds41-max')], ['high', 'max'])
+        self.assertEqual([json.loads(c.req(body={'model': 'ds41', 'messages': msgs, **extra}).raw)['effort']
+                          for extra in ({}, {'reasoning_effort': 'max'})], ['high', 'max'])
         self.assertIn('hard stop 2 h', c.llm('settings').stderr)
         self.assertEqual(c.llm('down').returncode, 0)
         c.wait(lambda: not procs_with(c.dir, '--detached'), 10)
@@ -549,7 +552,8 @@ class UnitTests(unittest.TestCase):
         cfg = json.loads(read(os.path.join(L.STATE, 'opencode.json')))['provider']['ds41']
         self.assertEqual(cfg['options']['baseURL'], 'http://127.0.0.1:18080/v1')
         self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (1800000, 900000))
-        self.assertEqual(cfg['models']['ds41-max']['limit']['context'], 524288)
+        self.assertEqual(list(cfg['models']), ['ds41'])
+        self.assertEqual(cfg['models']['ds41']['limit']['context'], 524288)
         self.assertEqual(cfg['models']['ds41']['modalities']['input'], ['text', 'image'])
 
     def test_vm_files_in_sync(self):

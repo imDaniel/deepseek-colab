@@ -19,8 +19,8 @@ if [ "$MMPROJ" = 1 ] || [ "${DMA:-0}" != 1 ]; then  # misses by the copy engine 
 else
   export LLAMA_MOE_DEVCACHE_DMA=1 CUDA_DEVICE_MAX_CONNECTIONS=32
 fi
-ARGS=(-m /content/model/DeepSeek-V4.1-Flash-1017-GSQ-RCO-$RUNG-00001-of-00006.gguf -a ds41,ds41-max --host 127.0.0.1 --port $PORT
-  -ngl 99 -fit off -ot "$CPU_RE" -fa on -c $CTX -np ${SLOTS:-2} -t 24 -b $UBATCH -ub $UBATCH -lv 4 -lm mmap --jinja --reasoning on --reasoning-effort 50
+ARGS=(-m /content/model/DeepSeek-V4.1-Flash-1017-GSQ-RCO-$RUNG-00001-of-00006.gguf -a ds41 --host 127.0.0.1 --port $PORT
+  -ngl 99 -fit off -ot "$CPU_RE" -fa on -c $CTX -np ${SLOTS:-2} -t 24 -b $UBATCH -ub $UBATCH -lv 4 -lm mmap --jinja --reasoning on --reasoning-effort "${REASONING_EFFORT:-max}"
   --metrics --api-key-file /content/secrets/key --cache-ram $CACHE_RAM --moe-cache-mib $MOE_CACHE_MIB)
 [ "$DRAFT" = 1 ] && ARGS+=(-md /mnt/ram/m/dspark.gguf --spec-type draft-dspark --spec-draft-n-max 2 -ngld 99 --spec-draft-n-ubatch 512
   --no-spec-draft-backend-sampling)  # backend draft sampling garbles the second sequence of a shared draft batch

@@ -33,7 +33,7 @@ KEY_FILE, SSH_KEY = os.path.join(STATE, 'api_key'), os.path.join(STATE, 'id_ed25
 SESSION, LOCK, LOG = (os.path.join(STATE, f) for f in ('session.json', 'serve.lock', 'llm.log'))
 SETTINGS_FILE = os.path.join(STATE, 'settings.json')
 VM_DIR = os.path.abspath(os.environ.get('LLM_VM_DIR') or os.path.join(ROOT, 'vm'))
-DEFAULTS = {'images': True, 'context': 524288, 'effort': '50', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
+DEFAULTS = {'images': True, 'context': 524288, 'effort': 'max', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
 
 
 def load_settings():
@@ -250,7 +250,7 @@ def describe(images, context):
 
 
 def model_efforts():
-    return (('ds41', str(SETTINGS['effort'])), ('ds41-max', 'max'))
+    return (('ds41', str(SETTINGS['effort'])),)
 
 
 def model_variant():
@@ -614,6 +614,7 @@ def build_bundle(path):
 def boot_vars():
     variant = model_variant()
     env = dict(profile(), MODEL_VARIANT=variant, UNCENSOR='1' if variant == 'original' and SETTINGS['uncensor'] else '0')
+    env['REASONING_EFFORT'] = str(SETTINGS['effort'])
     env.update({k: os.environ[k] for k in BOOT_KEYS if k in os.environ})
     for kv in os.environ.get('LLM_BOOT_ENV', '').split():
         k, sep, v = kv.partition('=')
@@ -1191,7 +1192,7 @@ class Manager:
 
 
 def with_effort(body):
-    """The model name ds41-max means reasoning effort max for clients that do not send reasoning_effort themselves."""
+    """Apply ds41's configured default unless the client supplies its own effort."""
     try:
         req = json.loads(body)
     except ValueError:
@@ -1199,7 +1200,7 @@ def with_effort(body):
     if not isinstance(req, dict) or req.get('reasoning_effort') is not None:
         return body
     effort = dict(model_efforts()).get(req.get('model'))
-    if effort is None or effort == '50':
+    if effort is None:
         return body
     req['reasoning_effort'] = effort
     return json.dumps(req).encode()
@@ -1211,11 +1212,13 @@ def error_obj(code, msg, kind='unavailable_error'):
 
 def with_output_limit(body, path):
     """Validate a bounded generation budget before acquiring the GPU."""
-    if path not in ('/v1/chat/completions', '/v1/responses'):
+    if path not in ('/v1/chat/completions', '/v1/completions', '/v1/responses'):
         return body
     req = json.loads(body)
     if not isinstance(req, dict):
         raise ValueError('request body must be a JSON object')
+    if req.get('model') not in (None, 'ds41'):
+        raise ValueError('unknown model; use ds41')
     fields = ('max_output_tokens',) if path == '/v1/responses' else ('max_tokens', 'max_completion_tokens', 'n_predict')
     present = [key for key in fields if key in req]
     if len(present) > 1:
@@ -1845,7 +1848,7 @@ def write_opencode(port=PORT):
 def endpoint_info(port, bal=None):
     info, me_cmd = profile(), cli()
     rows = (('Base URL', 'http://%s:%d/v1' % (HOST, port)), ('API key', api_key()),
-            ('Models', 'ds41 (effort %s) · ds41-max (effort max)' % SETTINGS['effort']),
+            ('Models', 'ds41 (effort %s)' % SETTINGS['effort']),
             ('Context', '%s tokens per request · image input %s · %s' % (
                 '{:,}'.format(int(info['CTX']) // int(info['SLOTS'])), 'on' if info['MMPROJ'] == '1' else 'off', speed_note(*choice()))))
     print()
@@ -1998,8 +2001,10 @@ def cmd_ask(words):
     held = serve_running()
     if not held:
         sys.exit('The endpoint is not running. Start it first: %s up' % cli())
-    model = 'ds41-max' if '--max' in words else 'ds41'
+    model = 'ds41'
     body = {'model': model, 'stream': True, 'messages': [{'role': 'user', 'content': ' '.join(w for w in words if w != '--max') or 'Hello!'}]}
+    if '--max' in words:
+        body['reasoning_effort'] = 'max'
     conn, r = http_call(held['port'], 'POST', '/v1/chat/completions', json.dumps(body).encode(),
                         {'Authorization': 'Bearer ' + api_key(), 'Content-Type': 'application/json'}, UPSTREAM_TIMEOUT, HOST)
     if r.status != 200:

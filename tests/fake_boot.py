@@ -17,7 +17,7 @@ def st(msg):
 def main():
     with open(os.path.join(R, 'boot.pgid'), 'w') as f:
         f.write(str(os.getpgid(0)))
-    env = {k: v for k, v in os.environ.items() if k in ('CTX', 'SLOTS', 'UBATCH', 'MMPROJ', 'MOE_CACHE_MIB', 'DYN', 'DRAFT', 'UNCENSOR') or k.startswith('X_')}
+    env = {k: v for k, v in os.environ.items() if k in ('CTX', 'SLOTS', 'UBATCH', 'MMPROJ', 'MOE_CACHE_MIB', 'DYN', 'DRAFT', 'UNCENSOR', 'REASONING_EFFORT') or k.startswith('X_')}
     env['FAKE_MODE'] = MODE
     files = [os.path.relpath(os.path.join(d, f), C) for d, _, fs in os.walk(V) for f in fs]
     want = ['secrets/key', 'vm/libpin.so', 'vm/boot.sh', 'vm/serve.sh', 'vm/build.sh', 'vm/patches/series']

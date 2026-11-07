@@ -2,6 +2,7 @@
 import concurrent.futures
 import http.client
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -17,13 +18,39 @@ from integrations.magpie_colab import config
 
 class RequestLimits(unittest.TestCase):
     def test_output_defaults_and_explicit_smaller_budgets(self):
-        for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
+        for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
             self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 32768)
             self.assertEqual(json.loads(llm.with_output_limit(json.dumps({field: 1024}).encode(), path))[field], 1024)
         value = json.loads(llm.with_output_limit(b'{"max_completion_tokens":8192}', '/v1/chat/completions'))
         self.assertEqual(value, {'max_tokens': 8192})
         self.assertEqual(json.loads(llm.with_output_limit(b'{"n_predict":256}', '/v1/chat/completions')), {'max_tokens': 256})
         self.assertEqual(llm.with_output_limit(b'invalid', '/v1/embeddings'), b'invalid')
+
+    def test_removed_model_does_not_enter_or_wake(self):
+        for path in ('/v1/chat/completions', '/v1/completions', '/v1/responses'):
+            h = object.__new__(llm.Handler)
+            h.server = mock.Mock(mgr=llm.Manager())
+            h.path, h.command = path, 'POST'
+            h.host_ok = h.authed = lambda: True
+            h.fail, h.held = mock.Mock(), mock.Mock()
+            h.route(b'{"model":"ds41-max"}')
+            self.assertEqual(h.fail.call_args.args[0], 400)
+            h.held.assert_not_called()
+            self.assertEqual((h.server.mgr.state, h.server.mgr.inflight), ('off', 0))
+
+    def test_ask_max_uses_explicit_effort_on_single_model(self):
+        for extra in ([], ['--max']):
+            response = mock.MagicMock(status=200)
+            response.__iter__.return_value = iter([b'data: [DONE]\n'])
+            with mock.patch.object(llm, 'serve_running', return_value={'port': 18080}), \
+                    mock.patch.object(llm, 'api_key', return_value='test-only'), \
+                    mock.patch.object(llm, 'http_call', return_value=(mock.Mock(), response)) as call, \
+                    mock.patch('sys.stdout', new_callable=io.StringIO):
+                llm.cmd_ask(['hello'] + extra)
+            body = json.loads(call.call_args.args[3])
+            self.assertEqual(body['model'], 'ds41')
+            self.assertEqual(body.get('reasoning_effort'), 'max' if extra else None)
+            self.assertEqual(body['messages'][0]['content'], 'hello')
 
     def test_invalid_budget_does_not_enter_or_wake(self):
         for payload in ({'max_tokens': 65536}, {'max_tokens': 0}, {'max_tokens': True}, {'max_tokens': 1.5},

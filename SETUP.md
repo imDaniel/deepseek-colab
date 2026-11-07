@@ -59,7 +59,7 @@ From then on, `up` shows your settings in one line: Enter starts, `c` changes th
 | `python3 llm.py status` | Endpoint state, Colab balance and session, base URL and key. |
 | `python3 llm.py watch` | The live status again: GPU running or off, countdown to the automatic stop, cost so far. |
 | `python3 llm.py settings` | Change the saved defaults. |
-| `python3 llm.py ask "question"` | Send one question and stream the answer. `--max` uses `ds41-max`. |
+| `python3 llm.py ask "question"` | Send one question and stream the answer. `--max` explicitly sets `reasoning_effort=max` on `ds41`. |
 | `python3 llm.py opencode [folder]` | Start opencode connected to the endpoint, in any shell. |
 | `python3 llm.py logs` | Local log plus the VM's boot timeline and the server log. |
 | `python3 llm.py serve` | Run the endpoint in the foreground. The GPU starts on the first request; Ctrl+C stops it. |
@@ -85,10 +85,9 @@ Base URL `http://127.0.0.1:18080/v1`, API key from `state/api_key` (also shown b
 
 | Model name | Reasoning effort | Use it for |
 | --- | --- | --- |
-| `ds41` | 50 | everyday work, faster answers |
-| `ds41-max` | max | hard problems; it thinks much longer |
+| `ds41` | max by default | all requests; uses the saved effort setting unless the request supplies one |
 
-A `reasoning_effort` field in the request overrides both. The reasoning arrives separately in `reasoning_content`.
+A `reasoning_effort` field in the request overrides the saved default. The reasoning arrives separately in `reasoning_content`. Magpie exposes this single model as `colab-ds41/ds41`.
 
 **curl**
 ```bash
@@ -110,7 +109,7 @@ print(reply.choices[0].message.content)
 
 **opencode:** `python3 llm.py opencode [project folder]` starts opencode with the generated config: both models, tool calling, the right context limit, images when image input is on. It works the same in bash, PowerShell and cmd. To use the endpoint from your own opencode config instead, copy the `provider` block from `state/opencode.json` into it.
 
-**Other apps** (Open WebUI, Continue, LibreChat, Chatbox, ...): add an "OpenAI-compatible" provider with the base URL, the key and the model name `ds41` or `ds41-max`. Listing models (`GET /v1/models`) is answered locally and never starts the GPU; only a real request does.
+**Other apps** (Open WebUI, Continue, LibreChat, Chatbox, ...): add an "OpenAI-compatible" provider with the base URL, the key and the model name `ds41`. Listing models (`GET /v1/models`) is answered locally and never starts the GPU; only a real request does.
 
 **Other devices.** By default the endpoint listens on 127.0.0.1 only. The safe way to reach it from another machine is an SSH tunnel to the computer running `llm.py` (`ssh -L 18080:127.0.0.1:18080 you@that-computer`) or a VPN such as Tailscale. `LLM_BIND=0.0.0.0` opens it on your network directly. The traffic is then plain HTTP, so anyone on that network can read the key.
 
@@ -122,7 +121,7 @@ The first `up` asks for these and saves them in `state/settings.json`; `python3 
 | --- | --- | --- |
 | Images | on | image input on or off |
 | Context | 512K | tokens per request: 32K, 64K, 131K, 262K, 512K or 1M, or any number from 4,096 to 1,048,576. Patched ISTA with images and DSpark uses scoped measured cache profiles at 262K and 512K. Other combinations retain their reference layouts. 512K has one decoder slot with up to four accepted clients including queueing. See [the latest 512K measurements](docs/benchmarks/colab-512k-dynamic-20261106.md). 1M uses a separately tuned experimental single-slot profile. See [the latest 1M measurements](docs/benchmarks/colab-1m-dynamic-20261106.md) for throughput, cold-prefill time, memory and limitations. |
-| Reasoning effort of `ds41` | 50 | 1-100, `low` (50), `high` (75) or `max`. `ds41-max` always uses max. A request's own `reasoning_effort` wins. |
+| Reasoning effort of `ds41` | max | 1-100, `low` (50), `high` (75) or `max`. A request's own `reasoning_effort` wins. |
 | Idle stop | 10 minutes | 1-120 minutes without requests, then the GPU stops |
 | Hard stop | 6 hours | 1-24 hours, then the GPU stops whatever happens |
 | Model | original | `original` uses the project model; `abiray` uses Abiray's pre-abliterated IQ2_XXS weights |
