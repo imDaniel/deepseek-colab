@@ -36,6 +36,8 @@ class RequestLimits(unittest.TestCase):
         for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
             self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 131072)
             self.assertEqual(json.loads(llm.with_output_limit(json.dumps({field: 1024}).encode(), path))[field], 1024)
+            for alias in ('max_tokens', 'max_completion_tokens', 'max_output_tokens', 'n_predict'):
+                self.assertEqual(json.loads(llm.with_output_limit(json.dumps({alias: 1024}).encode(), path)), {field: 1024})
         value = json.loads(llm.with_output_limit(b'{"max_completion_tokens":8192}', '/v1/chat/completions'))
         self.assertEqual(value, {'max_tokens': 8192})
         self.assertEqual(json.loads(llm.with_output_limit(b'{"n_predict":256}', '/v1/chat/completions')), {'max_tokens': 256})
@@ -121,6 +123,20 @@ class RequestLimits(unittest.TestCase):
                 self.assertTrue(mgr.cond.wait_for(lambda: mgr.inflight == 0, timeout=2))
         finally:
             release.set(); server.shutdown(); server.server_close(); thread.join(5)
+
+    def test_responses_extensions_cannot_override_the_public_cap_or_wake_gpu(self):
+        for payload in ({'n_predict': 262144}, {'max_completion_tokens': 262144},
+                        {'max_output_tokens': 1, 'n_predict': 262144},
+                        {'max_output_tokens': 1, 'max_completion_tokens': 262144}):
+            h = object.__new__(llm.Handler)
+            h.server = mock.Mock(mgr=llm.Manager())
+            h.path, h.command = '/v1/responses', 'POST'
+            h.host_ok = h.authed = lambda: True
+            h.fail, h.held = mock.Mock(), mock.Mock()
+            h.route(json.dumps(payload).encode())
+            self.assertEqual(h.fail.call_args.args[0], 400)
+            h.held.assert_not_called()
+            self.assertEqual((h.server.mgr.state, h.server.mgr.inflight), ('off', 0))
 
     def test_forwarding_exception_releases_admission(self):
         h = object.__new__(llm.Handler); h.server = mock.Mock(mgr=llm.Manager())

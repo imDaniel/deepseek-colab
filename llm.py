@@ -1235,7 +1235,10 @@ def with_output_limit(body, path, policy=None):
         raise ValueError('request body must be a JSON object')
     if req.get('model') not in (None, MODEL_ID):
         raise ValueError('unknown model; use ' + MODEL_ID)
-    fields = ('max_output_tokens',) if path == '/v1/responses' else ('max_tokens', 'max_completion_tokens', 'n_predict')
+    # Responses conversion retains llama.cpp extensions: n_predict can override
+    # max_output_tokens after conversion. Validate every alias before admission.
+    fields = (('max_output_tokens', 'max_tokens', 'max_completion_tokens', 'n_predict')
+              if path == '/v1/responses' else ('max_tokens', 'max_completion_tokens', 'n_predict', 'max_output_tokens'))
     present = [key for key in fields if key in req]
     if len(present) > 1:
         raise ValueError('use only one output-token limit')

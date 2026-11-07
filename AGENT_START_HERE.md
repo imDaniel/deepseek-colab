@@ -17,7 +17,7 @@ app --HTTP--> llm.py on 127.0.0.1:18080 --SSH tunnel (colab ssh --proxy-mode)-->
 
 ## Commands
 
-The credential-free [saved configuration](configs/colab-optimized-20261107.json) records current Magpie defaults and all three boot profiles; it is a dated snapshot, not an automatically loaded override. See [the tier comparison](docs/benchmarks/colab-context-tiers-20261106.md) and [repository privacy policy](docs/privacy.md) before publishing changes. Runtime source remains authoritative. Output defaults are 64K at 256K context and 128K at 512K context. The configured 1M default is 256K, pending release: its effective default and all public requests are capped at 128K. Keep 256K output private to explicitly authorized experiments.
+The credential-free [saved configuration](configs/colab-optimized-20261107.json) records current Magpie defaults and all three boot profiles; it is a dated snapshot, not an automatically loaded override. See [the tier comparison](docs/benchmarks/colab-context-tiers-20261106.md), [the output-budget comparison](docs/benchmarks/colab-output-budget-20261107.md) and [repository privacy policy](docs/privacy.md) before publishing changes. Runtime source remains authoritative. Output defaults are 64K at 256K context and 128K at 512K context. The configured 1M default is 256K, pending release: its effective default and all public requests are capped at 128K. Keep 256K output private to explicitly authorized experiments.
 
 | Command | Effect | Costs money? |
 | --- | --- | --- |
