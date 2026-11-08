@@ -262,7 +262,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(check['missing'], [])
         self.assertEqual(check['crlf'], [])
         self.assertEqual((check['secrets'], check['secret_modes']), (['key'], ['0o600']))
-        self.assertEqual((check['env']['CTX'], check['env']['MMPROJ']), ('524288', '1'))
+        self.assertEqual((check['env']['CTX'], check['env']['MMPROJ']), ('1048576', '1'))
         self.assertEqual(check['env']['REASONING_EFFORT'], 'max')
         r2 = c.req()
         self.assertEqual((r2.status, r2.content()), (200, 'ok'))
@@ -285,7 +285,7 @@ class ProxyTests(unittest.TestCase):
         self.assertEqual(r.status, 200)
         data = json.loads(r.raw)['data']
         self.assertEqual([m['id'] for m in data], ['deepseek-v4.1-flash-sec'])
-        self.assertEqual((data[0]['context_length'], data[0]['image_input']), (524288, True))
+        self.assertEqual((data[0]['context_length'], data[0]['image_input']), (1048576, True))
         self.assertEqual(c.req(method='GET', path='/v1/models', auth=False).status, 401)
         self.assertEqual(c.req(host='evil.example:%d' % c.port).status, 403)
         self.assertEqual(c.calls('new'), [])
@@ -317,8 +317,8 @@ class ProxyTests(unittest.TestCase):
         self.assertLess(again.t_headers, 1.0)
         self.assertEqual(len(c.calls('new')), 1)
         env = json.loads(read(c.res('boot_check.json')))['env']
-        self.assertEqual((env['FAKE_MODE'], env['X_EXTRA'], env['CTX'], env['UBATCH']), ('fail', '1', '524288', '512'))
-        self.assertEqual((env['SLOTS'], env['MOE_CACHE_MIB'], env['DYN']), ('1', '73000', '166'))
+        self.assertEqual((env['FAKE_MODE'], env['X_EXTRA'], env['CTX'], env['UBATCH']), ('fail', '1', '1048576', '512'))
+        self.assertEqual((env['SLOTS'], env['MOE_CACHE_MIB'], env['DYN']), ('1', '68864', '80'))
 
     def test_04_idle_stop_and_restart(self):
         c = Case(self, LLM_IDLE_MIN='0.05')
@@ -553,7 +553,7 @@ class UnitTests(unittest.TestCase):
         self.assertEqual(cfg['options']['baseURL'], 'http://127.0.0.1:18080/v1')
         self.assertEqual((cfg['options']['headerTimeout'], cfg['options']['chunkTimeout']), (7200000, 1800000))
         self.assertEqual(list(cfg['models']), ['deepseek-v4.1-flash-sec'])
-        self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['limit']['context'], 524288)
+        self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['limit']['context'], 1048576)
         self.assertEqual(cfg['models']['deepseek-v4.1-flash-sec']['modalities']['input'], ['text', 'image'])
 
     def test_vm_files_in_sync(self):
@@ -605,7 +605,7 @@ class UnitTests(unittest.TestCase):
         os.environ['LLM_BOOT_ENV'] = 'DRAFT=0 X_A=1'
         try:
             envs = L.boot_env()
-            self.assertIn("CTX='524288'", envs)
+            self.assertIn("CTX='1048576'", envs)
             self.assertIn("MMPROJ='1'", envs)
             self.assertIn("DRAFT='0' X_A='1'", envs)
             os.environ['LLM_PROFILE'] = 'fast'

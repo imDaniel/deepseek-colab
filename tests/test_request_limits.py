@@ -17,24 +17,24 @@ from integrations.magpie_colab import config
 
 
 class RequestLimits(unittest.TestCase):
-    def test_tier_defaults_and_pending_million_output_are_separate_from_public_cap(self):
+    def test_tier_defaults_follow_context_and_allow_million_output(self):
         for context, target, default in ((262144, 65536, 65536), (524288, 131072, 131072),
-                                          (1048576, 262144, 131072)):
+                                          (1048576, 262144, 262144)):
             policy = llm.output_policy(context)
             self.assertEqual(policy['configured_default_output_tokens'], target)
             self.assertEqual(policy['default_output_tokens'], default)
-            self.assertEqual(policy['max_output_tokens'], 131072)
+            self.assertEqual(policy['max_output_tokens'], default)
             self.assertEqual(policy['output_default_pending'], target > default)
             self.assertEqual(policy['input_budget_tokens'] + default, context)
             for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
                 self.assertEqual(json.loads(llm.with_output_limit(b'{}', path, policy))[field], default)
                 with self.assertRaises(ValueError):
-                    llm.with_output_limit(json.dumps({field: 262144}).encode(), path, policy)
+                    llm.with_output_limit(json.dumps({field: default * 2}).encode(), path, policy)
         self.assertEqual(llm.output_policy(131072)['default_output_tokens'], 32768)
 
     def test_output_defaults_and_explicit_smaller_budgets(self):
         for path, field in (('/v1/chat/completions', 'max_tokens'), ('/v1/completions', 'max_tokens'), ('/v1/responses', 'max_output_tokens')):
-            self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 131072)
+            self.assertEqual(json.loads(llm.with_output_limit(b'{}', path))[field], 262144)
             self.assertEqual(json.loads(llm.with_output_limit(json.dumps({field: 1024}).encode(), path))[field], 1024)
             for alias in ('max_tokens', 'max_completion_tokens', 'max_output_tokens', 'n_predict'):
                 self.assertEqual(json.loads(llm.with_output_limit(json.dumps({alias: 1024}).encode(), path)), {field: 1024})
@@ -70,8 +70,8 @@ class RequestLimits(unittest.TestCase):
             self.assertEqual(body['messages'][0]['content'], 'hello')
 
     def test_invalid_budget_does_not_enter_or_wake(self):
-        for payload in ({'max_tokens': 262144}, {'max_tokens': 0}, {'max_tokens': True}, {'max_tokens': 1.5},
-                        {'max_tokens': None}, {'max_tokens': 5, 'max_completion_tokens': 5}, {'n_predict': 262144}, []):
+        for payload in ({'max_tokens': 524288}, {'max_tokens': 0}, {'max_tokens': True}, {'max_tokens': 1.5},
+                        {'max_tokens': None}, {'max_tokens': 5, 'max_completion_tokens': 5}, {'n_predict': 524288}, []):
             h = object.__new__(llm.Handler)
             h.server = mock.Mock(mgr=llm.Manager())
             h.path, h.command = '/v1/chat/completions', 'POST'
@@ -125,9 +125,9 @@ class RequestLimits(unittest.TestCase):
             release.set(); server.shutdown(); server.server_close(); thread.join(5)
 
     def test_responses_extensions_cannot_override_the_public_cap_or_wake_gpu(self):
-        for payload in ({'n_predict': 262144}, {'max_completion_tokens': 262144},
-                        {'max_output_tokens': 1, 'n_predict': 262144},
-                        {'max_output_tokens': 1, 'max_completion_tokens': 262144}):
+        for payload in ({'n_predict': 524288}, {'max_completion_tokens': 524288},
+                        {'max_output_tokens': 1, 'n_predict': 524288},
+                        {'max_output_tokens': 1, 'max_completion_tokens': 524288}):
             h = object.__new__(llm.Handler)
             h.server = mock.Mock(mgr=llm.Manager())
             h.path, h.command = '/v1/responses', 'POST'
@@ -147,7 +147,7 @@ class RequestLimits(unittest.TestCase):
         self.assertEqual(h.server.mgr.inflight, 0)
 
     def test_context_tiers_preserve_saved_million_and_legacy_snapshots(self):
-        self.assertEqual(config.DEFAULTS['context'], 524288)
+        self.assertEqual(config.DEFAULTS['context'], 1048576)
         self.assertEqual(config.CHOICES['context'], (262144, 524288, 1048576))
         for legacy, desired in ((32768, 262144), (65536, 262144), (131072, 262144)):
             with tempfile.TemporaryDirectory() as temp:
@@ -157,7 +157,7 @@ class RequestLimits(unittest.TestCase):
                 with self.assertRaises(ValueError): config.write(p, dict(config.DEFAULTS, context=legacy))
         with tempfile.TemporaryDirectory() as temp:
             p = Path(temp) / 'settings.json'
-            self.assertEqual(config.read_desired(p)['context'], 524288)
+            self.assertEqual(config.read_desired(p)['context'], 1048576)
             config.write(p, dict(config.DEFAULTS, context=1048576))
             self.assertEqual(config.read_desired(p)['context'], 1048576)
 

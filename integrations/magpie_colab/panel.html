@@ -37,7 +37,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
  <label>模型版本<select id="model"><option value="original_base">ISTA 原版权重</option><option value="original_uncensored">ISTA 权重 + AtomicChat 补丁</option><option value="abiray">Abiray Uncensored</option></select><p class="hint">三种模式共享同一份兼容的编译缓存。</p></label>
  <label>空闲停机<select id="idle_min"><option value="2">2 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">1 小时</option></select><p class="hint">API 无活动后的本地停机阈值；Colab 可提前结束会话。</p></label>
  <label>最长连续运行<select id="max_hours"><option value="1">1 小时</option><option value="2">2 小时</option><option value="6">6 小时</option><option value="12">12 小时</option><option value="24">24 小时</option></select><p class="hint">本地强制停机上限，不延长 Colab 允许的运行时间。24 小时须符合 Colab 套餐条件，且不保证可用。</p></label>
- <label>每次请求上下文<select id="context"><option value="262144">262,144 token（256K）</option><option value="524288" selected>524,288 token（512K，默认）</option><option value="1048576">1,048,576 token（1M，实验档）</option></select><p class="hint">最多接收 4 个在途请求；256K 档使用两个解码槽，512K / 1M 档使用一个，其余请求排队。1M 首次处理百万输入约需 11–12 分钟，连续对话可复用前缀缓存。</p></label>
+ <label>每次请求上下文<select id="context"><option value="262144">262,144 token（256K）</option><option value="524288">524,288 token（512K）</option><option value="1048576" selected>1,048,576 token（1M，默认）</option></select><p class="hint">最多接收 4 个在途请求；256K 档使用两个解码槽，512K / 1M 档使用一个，其余请求排队。1M 首次处理百万输入约需 11–12 分钟，连续对话可复用前缀缓存。</p></label>
  <div><label>每次请求输出预算</label><p id="output-value">正在读取…</p><p class="hint" id="output-hint"></p></div>
  <label>默认推理强度<select id="effort"><option value="low">低</option><option value="high">高</option><option value="max">最高</option></select><p class="hint">请求指定的 reasoning_effort 优先。</p></label>
  <label>启动所需最低余额<input id="min_balance" type="number" min="0" max="100000" step="1"><p class="hint">只在启动前检查，不是账单硬上限。</p></label>
@@ -49,7 +49,7 @@ button{border:1px solid color-mix(in srgb,CanvasText 30%,transparent);border-rad
 (() => {
  const $ = id => document.getElementById(id), fields=['idle_min','max_hours','context','effort','min_balance','images','draft'];
  let dirty=false, logsBusy=false, policies={};
- function paintOutput(){const p=policies[$('context').value];if(!p)return;$('output-value').textContent=fmt(p.default_output_tokens)+' token（当前默认），对外上限 '+fmt(p.max_output_tokens);$('output-hint').textContent=(p.output_default_pending?'本档目标默认 '+fmt(p.configured_default_output_tokens)+'，256K 输出尚未开放；当前暂用 128K。':'')+'包含思考、正文与工具调用。默认输入预算 '+fmt(p.input_budget_tokens)+'，建议约 '+fmt(p.recommended_compact_at)+' token 压缩历史。输入与输出共享总窗口。';}
+ function paintOutput(){const p=policies[$('context').value];if(!p)return;$('output-value').textContent=fmt(p.default_output_tokens)+' token（当前默认），对外上限 '+fmt(p.max_output_tokens);$('output-hint').textContent=(p.output_default_pending?'本档目标默认 '+fmt(p.configured_default_output_tokens)+'，等待开放。':'')+'包含思考、正文与工具调用。默认输入预算 '+fmt(p.input_budget_tokens)+'，建议约 '+fmt(p.recommended_compact_at)+' token 压缩历史。输入与输出共享总窗口。';}
  const fmt = n => n == null ? '—' : Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2});
  const duration = s => {if(s == null)return '—';s=Math.max(0,Math.round(s));return Math.floor(s/3600)+'小时 '+Math.floor(s%3600/60)+'分 '+s%60+'秒'};
  function paint(d){

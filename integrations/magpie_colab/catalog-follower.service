@@ -1,0 +1,24 @@
+[Unit]
+Description=Follow Colab model capacities through a remote Magpie provider
+After=network-online.target magpie.service
+
+[Service]
+Type=simple
+User=magpie
+Group=magpie
+Environment=HOME=/var/lib/magpie/config/home
+Environment=XDG_CONFIG_HOME=/var/lib/magpie/config
+Environment=COLAB_MAGPIE_PROVIDER=remote-magpie
+Environment=COLAB_UPSTREAM_MODEL=colab-ds41/deepseek-v4.1-flash-sec
+Environment=COLAB_MAGPIE_SERVICE=magpie.service
+ExecStart=/usr/bin/python3 /opt/colab-magpie-catalog/refresh.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

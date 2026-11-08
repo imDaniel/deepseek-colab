@@ -6,7 +6,7 @@ from pathlib import Path
 
 DEFAULTS = {
     'idle_min': 10, 'max_hours': 6, 'model': 'original', 'images': True,
-    'context': 524288, 'effort': 'max', 'uncensor': True, 'draft': True,
+    'context': 1048576, 'effort': 'max', 'uncensor': True, 'draft': True,
     'min_balance': 5,
 }
 CHOICES = {

@@ -33,7 +33,7 @@ KEY_FILE, SSH_KEY = os.path.join(STATE, 'api_key'), os.path.join(STATE, 'id_ed25
 SESSION, LOCK, LOG = (os.path.join(STATE, f) for f in ('session.json', 'serve.lock', 'llm.log'))
 SETTINGS_FILE = os.path.join(STATE, 'settings.json')
 VM_DIR = os.path.abspath(os.environ.get('LLM_VM_DIR') or os.path.join(ROOT, 'vm'))
-DEFAULTS = {'images': True, 'context': 524288, 'effort': 'max', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
+DEFAULTS = {'images': True, 'context': 1048576, 'effort': 'max', 'idle_min': 10, 'max_hours': 6, 'uncensor': True, 'model': 'original'}
 
 
 def load_settings():
@@ -58,7 +58,7 @@ TUNNEL_PORT = int(os.environ.get('LLM_TUNNEL_PORT', '0'))
 POLL_S = float(os.environ.get('LLM_POLL_S', '15'))
 HEALTH_S = min(1.0, POLL_S)
 BOOT_TIMEOUT, FAIL_COOLDOWN, KEEPALIVE_S, MAX_BODY, UPSTREAM_TIMEOUT = 1500, 60, 5, 64 << 20, 7200
-MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 131072
+MAX_INFLIGHT, MAX_OUTPUT_TOKENS = 4, 262144
 OUTPUT_DEFAULTS = {262144: 65536, 524288: 131072, 1048576: 262144}
 MODEL_ID = 'deepseek-v4.1-flash-sec'
 REASONING_LEVELS = ('low', 'high', 'max')
@@ -1214,10 +1214,10 @@ def error_obj(code, msg, kind='unavailable_error'):
 
 
 def output_policy(context=None):
-    """Separate configured tier defaults from the current public rollout ceiling."""
+    """Advertise the selected tier budget so relays and clients follow context changes."""
     context = choice()[1] if context is None else int(context)
     target = OUTPUT_DEFAULTS.get(context, min(32768, context // 2))
-    ceiling = min(MAX_OUTPUT_TOKENS, context // 2)
+    ceiling = min(MAX_OUTPUT_TOKENS, OUTPUT_DEFAULTS.get(context, MAX_OUTPUT_TOKENS), context // 2)
     default = min(target, ceiling)
     input_budget = context - default
     return {'context': context, 'configured_default_output_tokens': target,
@@ -1247,7 +1247,7 @@ def with_output_limit(body, path, policy=None):
     ceiling = policy['max_output_tokens']
     value = req.get(key, policy['default_output_tokens'])
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= ceiling:
-        raise ValueError('%s must be an integer from 1 to %d; 256K output is not enabled on the public API' % (key, ceiling))
+        raise ValueError('%s must be an integer from 1 to %d for the selected context tier' % (key, ceiling))
     if key != fields[0]:
         del req[key]
     req[fields[0]] = value

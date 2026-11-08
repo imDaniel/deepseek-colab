@@ -2,6 +2,7 @@
 import http.client
 import importlib.util
 import json
+import io
 import os
 import sys
 import tempfile
@@ -18,6 +19,40 @@ with mock.patch.dict(sys.modules, {'llm': llm}):
 
 
 class SettingsTests(unittest.TestCase):
+    def test_upstream_catalog_follows_all_three_tiers_without_inference(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / 'providers.json'
+            provider = {'id': 'relay', 'chat': 'https://example.com/v1', 'key': 'fixture-key'}
+            path.write_text(json.dumps({'providers': [provider]}))
+            row = {'id': 'colab/model', 'context_length': 1048576, 'max_output_tokens': 262144}
+            def response(request, timeout):
+                self.assertEqual(request.full_url, 'https://example.com/v1/models')
+                self.assertEqual(request.get_header('Authorization'), 'Bearer fixture-key')
+                return io.BytesIO(json.dumps({'data': [row]}).encode())
+            with mock.patch.dict(os.environ, {'COLAB_UPSTREAM_MODEL': 'colab/model', 'MAGPIE_PROVIDER_CONFIG': str(path)}, clear=True), \
+                    mock.patch.object(refresh, 'PROVIDER', 'relay'), mock.patch.object(refresh, 'urlopen', side_effect=response) as fetch:
+                signatures = []
+                for context, output in ((1048576, 262144), (524288, 131072), (262144, 65536)):
+                    row.update(context_length=context, max_output_tokens=output)
+                    signatures.append(refresh.current_signature())
+                self.assertEqual(len(set(signatures)), 3)
+                self.assertEqual(refresh.current_signature(), signatures[-1])
+                row['max_output_tokens'] = None
+                with self.assertRaises(ValueError): refresh.current_signature()
+                provider['chat'] = 'http://example.com/v1'
+                path.write_text(json.dumps({'providers': [provider]}));fetch.reset_mock()
+                with self.assertRaises(ValueError): refresh.current_signature()
+                fetch.assert_not_called()
+
+    def test_catalog_follower_reuses_existing_management_key(self):
+        with mock.patch.dict(os.environ, {'COLAB_MAGPIE_SERVICE': 'magpie.service'}, clear=True), \
+                mock.patch.object(refresh.subprocess, 'check_output', return_value='123\n') as pid, \
+                mock.patch.object(Path, 'read_bytes', return_value=b'OTHER=x\0MAGPIE_WEB_KEY=fixture-key\0') as read:
+            self.assertEqual(refresh.management_key(), 'fixture-key')
+            read.assert_called_once()
+            pid.return_value = '0\n'
+            with self.assertRaises(ValueError): refresh.management_key()
+
     def test_refresh_updates_running_gateway_catalog_and_keeps_key_on_loopback(self):
         with mock.patch.dict(os.environ, {'MAGPIE_WEB_KEY': 'fixture-key', 'COLAB_MAGPIE_WEB_URL': 'http://127.0.0.1:3430'}, clear=True), \
                 mock.patch.object(refresh, 'urlopen') as fetch, mock.patch.object(refresh.subprocess, 'run') as cli:
@@ -301,7 +336,7 @@ class SettingsTests(unittest.TestCase):
             config.write(controller.DESIRED, dict(config.DEFAULTS, context=1048576))
             self.assertEqual(handler.models()['data'][0]['context_length'], 1048576)
             self.assertEqual(handler.output_policy()['configured_default_output_tokens'], 262144)
-            self.assertEqual(handler.output_policy()['default_output_tokens'], 131072)
+            self.assertEqual(handler.output_policy()['default_output_tokens'], 262144)
             self.assertEqual(config.read_desired(controller.DESIRED)['context'], 1048576)
 
 
@@ -356,7 +391,7 @@ class PanelTests(unittest.TestCase):
                 c.request('GET', '/api/status'); r = c.getresponse(); data = json.loads(r.read())
                 self.assertEqual(r.status, 200)
                 self.assertEqual(data['desired']['model'], 'original')
-                self.assertEqual(data['desired']['context'], 524288)
+                self.assertEqual(data['desired']['context'], 1048576)
                 self.assertTrue(data['desired']['uncensor'])
                 self.assertEqual(data['balance']['value'], 20)
                 c.close()

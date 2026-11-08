@@ -192,6 +192,6 @@ Tests (Linux, offline, about 80 s): `python3 -B -m unittest -v tests/test_llm.py
 
 `python3 llm.py down`, then delete the folder. To remove the Colab CLI too: `uv tool uninstall google-colab-cli` and delete `~/.config/colab-cli/`.
 
-## Output budgets (2026-11-07)
+## Context and output budgets (2026-11-08)
 
-The 256K context defaults to 65,536 generated tokens; the default 512K context uses 131,072. The configured 1M default is 262,144, pending validation and explicit later release; effective output remains 131,072. Controller requests above 131,072 fail before Colab wakes; both relay catalogs advertise that ceiling. The shared budget includes thinking, visible text and tool calls, and input plus generated tokens must fit the selected context. Update explicit client budgets as well as both relay catalogs. See the [current configuration](configs/colab-optimized-20261107.json) and [integration guide](integrations/magpie_colab/README.md).
+The default is 1,048,576 context / 262,144 output tokens. Selecting 524,288 context uses 131,072 output; 262,144 context uses 65,536 output. Smaller explicit budgets are accepted; larger or ambiguous budgets fail before GPU startup. Output includes reasoning, visible text and tool calls. Input plus generated output must fit the context. Remove fixed gateway/client output overrides so model discovery follows the selected tier, and refresh a running client's model catalog after a change. See the [current configuration](configs/colab-optimized-20261108.json) and [integration guide](integrations/magpie_colab/README.md).

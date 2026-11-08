@@ -2,7 +2,7 @@
 
 Publish source, credential-free configuration snapshots and sanitized benchmark results. Keep runtime state, OAuth credentials, API/management keys, SSH private keys, private infrastructure identifiers, account balances and raw operational logs outside Git. The default `state/` and local `experiments/` directories are ignored; a custom `LLM_STATE` should also be outside the repository or explicitly ignored.
 
-The dated [configuration snapshot](../configs/colab-optimized-20261107.json) contains only settings and boot parameters. It does not contain an API key, management key, OAuth token, host address or user filesystem path. Runtime source remains authoritative; this snapshot is a record, not an automatically loaded override.
+The dated [configuration snapshot](../configs/colab-optimized-20261108.json) contains only settings and boot parameters. It does not contain an API key, management key, OAuth token, host address or user filesystem path. Runtime source remains authoritative; this snapshot is a record, not an automatically loaded override.
 
 Before publishing, review staged paths and run Gitleaks on both the staged change and all reachable history:
 

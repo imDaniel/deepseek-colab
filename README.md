@@ -62,13 +62,13 @@ The selection applies to the local endpoint and its automatic restarts. Stop the
 
 Abiray was tested on a fresh G4 with 32K text-only context and DSpark: the model loaded, and non-streaming and streaming requests passed. With a 1M allocation and image input enabled, it correctly identified a test image and answered a synthetic 1,000,054-token prompt in 674 seconds. The project Uncensored mode was tested on a fresh G4 and successfully applied the AtomicChat patch. Sustained operation, long-context accuracy on realistic material and image quality with Abiray have not been established; the project's published performance numbers apply only to the original model.
 
-The Magpie integration defaults to 524,288 tokens, with 262,144 and experimental 1,048,576-token options, a 131,072-token public maximum output budget including reasoning, and up to four accepted requests with backend queueing. Additional requests receive HTTP 429; the controller rejects invalid or excessive output budgets with HTTP 400 before starting a GPU. See [the integration guide](integrations/magpie_colab/README.md) for settings, client compaction and logs. The 256K tier defaults to 65,536 output tokens and the 512K tier to 131,072. The configured 1M default is 262,144, pending validation; its current effective default and public ceiling remain 131,072. Experimental 256K output is not exposed. The CLI retains its legacy context options for compatibility.
+The Magpie integration defaults to 1,048,576 context tokens and 262,144 output tokens. Switching to 524,288 context selects 131,072 output; 262,144 context selects 65,536 output. The selected output budget is both the default and the advertised maximum, includes reasoning, and shares the context window with input. Up to four requests are accepted including backend queueing; additional requests receive HTTP 429. Invalid or excessive budgets are rejected by the controller before GPU startup. See [the integration guide](integrations/magpie_colab/README.md) for model-catalog synchronization, compaction and logs. The CLI retains its legacy context options.
 
 The startup scripts try to restore a pinned G4 binary from this repository's release. They verify its digest, build inputs, GPU, driver, CUDA and runtime environment before use, and fall back to compiling from source if the cache cannot be used.
 
 ## What you get
 
-The table below records the original reference layouts. The current default is 512K; see [the latest 512K measurements](docs/benchmarks/colab-512k-dynamic-20261106.md) for complete-code speed, long-input latency and limitations.
+The table below records the original reference layouts. The selected default is 1M; see [the latest 1M measurements](docs/benchmarks/colab-1m-dynamic-20261106.md) for complete-code speed, long-input latency and limitations.
 
 | | Images on, 262K reference | Text only, up to 131K (`--fast`) |
 | --- | --- | --- |
